@@ -10,6 +10,12 @@ For local development:
 http://localhost:8000
 ```
 
+> A Postman collection and environment file are provided in the repository:
+> - `postman_collection.json`
+> - `postman_environment.json`
+>
+> Import these into Postman and set `base_url` to your target host.
+
 ---
 
 ## Authentication Service
