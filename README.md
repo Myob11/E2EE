@@ -41,7 +41,22 @@ flowchart TD
 		F --> OBS
 ```
 
-## 3. Mikrostoritve in odgovornosti
+## 3. Signal encryption workflow diagram
+
+The project includes a precise Signal-style encryption workflow diagram.
+The diagram shows:
+- client-side key generation and bundle registration
+- recipient bundle retrieval
+- local encryption before sending
+- storage of ciphertext in the message service
+- local decryption after retrieval
+
+You can export the diagram with Mermaid tools:
+- use `https://mermaid.live`
+- paste the Mermaid code
+- export as SVG/PNG/PDF
+
+## 4. Mikrostoritve in odgovornosti
 
 ### 3.1 Auth service
 - Registracija, prijava, osvezevanje tokenov.
