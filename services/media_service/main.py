@@ -14,6 +14,7 @@ MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
 MINIO_BUCKET = os.getenv("MINIO_BUCKET", "media")
 MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
+DOMAIN = os.getenv("DOMAIN", "secra.top")
 
 # In-memory media storage (for testing without MinIO)
 media_db = {}
@@ -74,8 +75,9 @@ def get_upload_url(filename: str, content_type: str, user_id: str):
             ExpiresIn=3600  # 1 hour
         )
     except Exception:
-        # Fallback for testing without MinIO
-        upload_url = f"http://minio:9000/{MINIO_BUCKET}/{media_id}"
+        # Fallback for testing without MinIO - use domain
+        protocol = "https" if MINIO_SECURE else "http"
+        upload_url = f"{protocol}://media.{DOMAIN}/{MINIO_BUCKET}/{media_id}"
     
     media_db[media_id] = {
         "id": media_id,
@@ -120,8 +122,9 @@ def get_download_url(media_id: str):
             ExpiresIn=3600  # 1 hour
         )
     except Exception:
-        # Fallback for testing without MinIO
-        download_url = f"http://minio:9000/{MINIO_BUCKET}/{media_id}"
+        # Fallback for testing without MinIO - use domain
+        protocol = "https" if MINIO_SECURE else "http"
+        download_url = f"{protocol}://media.{DOMAIN}/{MINIO_BUCKET}/{media_id}"
     
     expires_at = (datetime.utcnow() + timedelta(hours=1)).isoformat() + "Z"
     

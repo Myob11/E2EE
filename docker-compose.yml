@@ -2,20 +2,43 @@ version: '3.8'
 
 services:
   # =====================
-  # API Gateway
+  # NGINX Reverse Proxy (API Gateway)
+  # =====================
+  nginx:
+    build:
+      context: ./services/api_gateway
+      dockerfile: Dockerfile.nginx
+    container_name: e2ee_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./services/api_gateway/nginx/ssl:/etc/nginx/ssl:ro
+    environment:
+      - DOMAIN=secra.top
+    depends_on:
+      - api_gateway
+      - minio
+    networks:
+      - e2ee_network
+    restart: unless-stopped
+
+  # =====================
+  # API Gateway (FastAPI)
   # =====================
   api_gateway:
     build:
       context: ./services/api_gateway
       dockerfile: Dockerfile
     container_name: e2ee_api_gateway
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
       - AUTH_SERVICE_URL=http://auth_service:8001
       - CHAT_SERVICE_URL=http://chat_service:8002
       - MESSAGE_SERVICE_URL=http://message_service:8003
       - MEDIA_SERVICE_URL=http://media_service:8004
+      - DOMAIN=secra.top
     depends_on:
       - auth_service
       - chat_service
@@ -143,11 +166,12 @@ services:
     environment:
       - MINIO_ROOT_USER=minioadmin
       - MINIO_ROOT_PASSWORD=minioadmin
+      - DOMAIN=secra.top
     volumes:
       - minio_data:/data
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+    expose:
+      - "9000"
+      - "9001"
     networks:
       - e2ee_network
 

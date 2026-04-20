@@ -1,19 +1,30 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 import httpx
 import os
 
 app = FastAPI()
+
+# CORS settings for Android app
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Configure appropriately for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Service URLs (from environment or docker-compose)
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth_service:8001")
 CHAT_SERVICE_URL = os.getenv("CHAT_SERVICE_URL", "http://chat_service:8002")
 MESSAGE_SERVICE_URL = os.getenv("MESSAGE_SERVICE_URL", "http://message_service:8003")
 MEDIA_SERVICE_URL = os.getenv("MEDIA_SERVICE_URL", "http://media_service:8004")
+DOMAIN = os.getenv("DOMAIN", "secra.top")
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "api_gateway"}
+    return {"status": "ok", "service": "api_gateway", "domain": DOMAIN}
 
 # =====================
 # Auth Service Routes

@@ -2,6 +2,11 @@
 
 ## Base URL
 ```
+https://secra.top
+```
+
+For local development:
+```
 http://localhost:8000
 ```
 
@@ -383,20 +388,41 @@ Get media file metadata.
 
 ---
 
-## Service Ports
+## Domain Configuration
 
-| Service | Port |
-|---------|------|
-| API Gateway | 8000 |
-| Auth Service | 8001 |
-| Chat Service | 8002 |
-| Message Service | 8003 |
-| Media Service | 8004 |
-| PostgreSQL | 5432 |
-| Redis | 6379 |
-| MongoDB | 27017 |
-| MinIO | 9000 |
-| MinIO Console | 9001 |
+| Service | Domain |
+|---------|--------|
+| API Gateway | `secra.top` |
+| MinIO Console | `minio.secra.top` |
+| Media Files | `media.secra.top` |
+
+### DNS Records (Cloudflare)
+Point the following records to your server's IP:
+
+| Type | Name | Value |
+|------|------|-------|
+| A | secra.top | YOUR_SERVER_IP |
+| A | www.secra.top | YOUR_SERVER_IP |
+| A | minio.secra.top | YOUR_SERVER_IP |
+| A | media.secra.top | YOUR_SERVER_IP |
+
+---
+
+## Service Ports (Internal)
+
+| Service | Internal Port | External Port |
+|---------|---------------|---------------|
+| NGINX | 80, 443 | 80, 443 |
+| API Gateway | 8000 | (via NGINX) |
+| Auth Service | 8001 | (via NGINX) |
+| Chat Service | 8002 | (via NGINX) |
+| Message Service | 8003 | (via NGINX) |
+| Media Service | 8004 | (via NGINX) |
+| PostgreSQL | 5432 | - |
+| Redis | 6379 | - |
+| MongoDB | 27017 | - |
+| MinIO | 9000 | - |
+| MinIO Console | 9001 | - |
 
 ---
 
@@ -406,3 +432,54 @@ Get media file metadata.
 - Messages are encrypted on the client using the Signal protocol — the backend only stores and relays ciphertext.
 - Media files are stored in MinIO (S3-compatible storage).
 - The API Gateway proxies all requests to the appropriate microservices.
+
+---
+
+## SSL/TLS Configuration
+
+For production with HTTPS:
+
+1. **Using Let's Encrypt (recommended):**
+   ```bash
+   # Install certbot
+   sudo apt install certbot python3-certbot-nginx
+   
+   # Generate certificate
+   sudo certbot --nginx -d secra.top -d www.secra.top
+   ```
+
+2. **Or use Cloudflare SSL:**
+   - Enable "Full" or "Flexible" SSL in Cloudflare dashboard
+   - No certificate needed on server
+
+---
+
+## Example Requests
+
+### Register User
+```bash
+curl -X POST https://secra.top/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username": "alice", "password": "secret123", "public_key": "..."}'
+```
+
+### Login
+```bash
+curl -X POST https://secra.top/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "alice", "password": "secret123"}'
+```
+
+### Create Chat
+```bash
+curl -X POST https://secra.top/api/chats \
+  -H "Content-Type: application/json" \
+  -d '{"member_ids": ["user_1", "user_2"], "is_group": false}'
+```
+
+### Send Message
+```bash
+curl -X POST https://secra.top/api/chats/chat_abc123/messages \
+  -H "Content-Type: application/json" \
+  -d '{"chat_id": "chat_abc123", "sender_id": "user_1", "ciphertext": "encrypted...", "message_type": "text"}'
+```
