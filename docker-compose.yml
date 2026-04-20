@@ -31,8 +31,8 @@ services:
       context: ./services/api_gateway
       dockerfile: Dockerfile
     container_name: e2ee_api_gateway
-    expose:
-      - "8000"
+    ports:
+      - "8000:8000"
     environment:
       - AUTH_SERVICE_URL=http://auth_service:8001
       - CHAT_SERVICE_URL=http://chat_service:8002
@@ -46,6 +46,7 @@ services:
       - media_service
     networks:
       - e2ee_network
+    restart: unless-stopped
 
   # =====================
   # Auth Service
