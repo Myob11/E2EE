@@ -93,6 +93,53 @@ Get a user's public key for E2EE encryption.
 
 ---
 
+### Register Signal Key Bundle
+**Endpoint:** `POST /api/users/{user_id}/keys`
+
+Register or refresh a Signal-style key bundle for a user device.
+
+**Request Body:**
+```json
+{
+  "identity_key": "string",
+  "signed_prekey": "string",
+  "one_time_prekeys": ["string"],
+  "registration_id": 12345,
+  "device_id": "android-phone-1"
+}
+```
+
+**Response:**
+```json
+{
+  "user_id": "user_1",
+  "device_id": "android-phone-1",
+  "status": "ok"
+}
+```
+
+---
+
+### Get User Key Bundle
+**Endpoint:** `GET /api/users/{user_id}/bundle`
+
+Retrieve a user's public Signal key bundle for session establishment.
+One one-time prekey is consumed on each request.
+
+**Response:**
+```json
+{
+  "user_id": "user_1",
+  "identity_key": "string",
+  "signed_prekey": "string",
+  "one_time_prekey": "string",
+  "registration_id": 12345,
+  "device_id": "android-phone-1"
+}
+```
+
+---
+
 ## Chat Service
 
 ### Create Chat
