@@ -448,10 +448,6 @@ For production with HTTPS:
    sudo certbot --nginx -d secra.top -d www.secra.top
    ```
 
-2. **Or use Cloudflare SSL:**
-   - Enable "Full" or "Flexible" SSL in Cloudflare dashboard
-   - No certificate needed on server
-
 ---
 
 ## Example Requests

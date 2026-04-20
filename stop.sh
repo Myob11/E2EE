@@ -4,5 +4,5 @@
 # Usage: ./stop.sh
 
 echo "⛔ Stopping E2EE Chat App..."
-sudo docker-compose -f docker-compose.prod.yml down
+sudo docker-compose -f docker-compose.yml down
 echo "✅ All services stopped"
