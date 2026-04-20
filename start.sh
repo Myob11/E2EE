@@ -9,7 +9,10 @@ echo "🚀 Starting E2EE Chat App..."
 
 # Remove old containers to avoid compose bugs
 echo "Cleaning up old containers..."
-sudo docker-compose down --remove-orphans 2>/dev/null || true
+sudo docker-compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
+
+echo "Removing stale E2EE containers if present..."
+sudo docker ps -a --filter "name=^/e2ee_" --format '{{.ID}}' | xargs -r sudo docker rm -f 2>/dev/null || true
 
 # Build and start
 echo "Building and starting services..."
