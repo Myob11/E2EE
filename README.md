@@ -51,6 +51,62 @@ The diagram shows:
 - storage of ciphertext in the message service
 - local decryption after retrieval
 
+```mermaid
+sequenceDiagram
+    participant Client as Mobile App
+    participant Gateway as API Gateway
+    participant Auth as Auth Service
+    participant Message as Message Service
+    participant PG as PostgreSQL
+    participant Mongo as MongoDB
+
+    Client->>Gateway: POST /api/auth/register
+    Gateway->>Auth: POST /register
+    Auth->>PG: INSERT user
+    PG-->>Auth: user saved
+    Auth-->>Gateway: user info
+    Gateway-->>Client: registration response
+
+    Client->>Gateway: POST /api/auth/login
+    Gateway->>Auth: POST /login
+    Auth->>PG: SELECT user
+    PG-->>Auth: user record
+    Auth-->>Gateway: access_token
+    Gateway-->>Client: JWT
+
+    Client->>Gateway: POST /api/users/{user_id}/keys
+    Note right of Client: generate identity, signed prekey, one-time prekeys locally
+    Gateway->>Auth: POST /users/{user_id}/keys
+    Auth->>PG: INSERT/UPDATE device bundle
+    PG-->>Auth: saved
+    Auth-->>Gateway: status ok
+    Gateway-->>Client: bundle registered
+
+    Client->>Gateway: GET /api/users/{recipient_id}/bundle
+    Gateway->>Auth: GET /users/{recipient_id}/bundle
+    Auth->>PG: SELECT device bundle
+    PG-->>Auth: bundle data
+    Auth-->>Gateway: bundle payload
+    Gateway-->>Client: recipient public bundle
+    Note right of Client: derive session and encrypt message using Signal
+
+    Client->>Gateway: POST /api/chats/{chat_id}/messages
+    Note right of Client: send ciphertext only
+    Gateway->>Message: POST /chats/{chat_id}/messages
+    Message->>Mongo: INSERT ciphertext
+    Mongo-->>Message: stored
+    Message-->>Gateway: message saved
+    Gateway-->>Client: message response
+
+    Client->>Gateway: GET /api/chats/{chat_id}/messages
+    Gateway->>Message: GET /chats/{chat_id}/messages
+    Message->>Mongo: SELECT messages
+    Mongo-->>Message: ciphertext list
+    Message-->>Gateway: ciphertext list
+    Gateway-->>Client: encrypted messages
+    Note right of Client: decrypt ciphertext locally with session
+```
+
 You can export the diagram with Mermaid tools:
 - use `https://mermaid.live`
 - paste the Mermaid code
