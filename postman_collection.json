@@ -1,0 +1,456 @@
+{
+  "info": {
+    "name": "E2EE Chat App API",
+    "description": "Postman collection for E2EE Chat App microservices through API Gateway.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/health",
+          "host": ["{{base_url}}"],
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "Auth Register",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"alice\",\n  \"password\": \"Secret123!\",\n  \"public_key\": \"BASE64_PUBLIC_KEY\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/auth/register",
+          "host": ["{{base_url}}"],
+          "path": ["api","auth","register"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var json = pm.response.json();",
+              "if (json.id) { pm.environment.set('user_id', json.id); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"alice\",\n  \"password\": \"Secret123!\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/auth/login",
+          "host": ["{{base_url}}"],
+          "path": ["api","auth","login"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var json = pm.response.json();",
+              "if (json.access_token) { pm.environment.set('auth_token', json.access_token); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get Current User",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/users/me",
+          "host": ["{{base_url}}"],
+          "path": ["api","users","me"]
+        }
+      }
+    },
+    {
+      "name": "Get User Public Key",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/users/{{user_id}}/public-key",
+          "host": ["{{base_url}}"],
+          "path": ["api","users","{{user_id}}","public-key"]
+        }
+      }
+    },
+    {
+      "name": "Register Signal Key Bundle",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"identity_key\": \"BASE64_IDENTITY_KEY\",\n  \"signed_prekey\": \"BASE64_SIGNED_PREKEY\",\n  \"one_time_prekeys\": [\"ONE_TIME_PREKEY_1\", \"ONE_TIME_PREKEY_2\"],\n  \"registration_id\": 12345,\n  \"device_id\": \"android-phone-1\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/users/{{user_id}}/keys",
+          "host": ["{{base_url}}"],
+          "path": ["api","users","{{user_id}}","keys"]
+        }
+      }
+    },
+    {
+      "name": "Get User Key Bundle",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/users/{{user_id}}/bundle",
+          "host": ["{{base_url}}"],
+          "path": ["api","users","{{user_id}}","bundle"]
+        }
+      }
+    },
+    {
+      "name": "Create Chat",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Test Chat\",\n  \"member_ids\": [\"{{user_id}}\"],\n  \"is_group\": false\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/chats",
+          "host": ["{{base_url}}"],
+          "path": ["api","chats"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var json = pm.response.json();",
+              "if (json.id) { pm.environment.set('chat_id', json.id); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "List Chats",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/chats",
+          "host": ["{{base_url}}"],
+          "path": ["api","chats"]
+        }
+      }
+    },
+    {
+      "name": "Get Chat",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/chats/{{chat_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api","chats","{{chat_id}}"]
+        }
+      }
+    },
+    {
+      "name": "Add Chat Member",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"user_id\": \"{{user_id}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/chats/{{chat_id}}/members",
+          "host": ["{{base_url}}"],
+          "path": ["api","chats","{{chat_id}}","members"]
+        }
+      }
+    },
+    {
+      "name": "Remove Chat Member",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/chats/{{chat_id}}/members/{{user_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api","chats","{{chat_id}}","members","{{user_id}}"]
+        }
+      }
+    },
+    {
+      "name": "Send Message",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"chat_id\": \"{{chat_id}}\",\n  \"sender_id\": \"{{user_id}}\",\n  \"ciphertext\": \"BASE64_CIPHERTEXT\",\n  \"message_type\": \"text\",\n  \"metadata\": {}\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/chats/{{chat_id}}/messages",
+          "host": ["{{base_url}}"],
+          "path": ["api","chats","{{chat_id}}","messages"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var json = pm.response.json();",
+              "if (json.id) { pm.environment.set('message_id', json.id); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get Chat Messages",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/chats/{{chat_id}}/messages?limit=50",
+          "host": ["{{base_url}}"],
+          "path": ["api","chats","{{chat_id}}","messages"],
+          "query": [
+            {
+              "key": "limit",
+              "value": "50"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get Message",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/messages/{{message_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api","messages","{{message_id}}"]
+        }
+      }
+    },
+    {
+      "name": "Delete Message",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/messages/{{message_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api","messages","{{message_id}}"]
+        }
+      }
+    },
+    {
+      "name": "Get Media Upload URL",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"filename\": \"photo.jpg\",\n  \"content_type\": \"image/jpeg\",\n  \"user_id\": \"{{user_id}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/media/upload-url",
+          "host": ["{{base_url}}"],
+          "path": ["api","media","upload-url"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var json = pm.response.json();",
+              "if (json.upload_id) { pm.environment.set('media_id', json.upload_id); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Complete Media Upload",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"media_id\": \"{{media_id}}\",\n  \"size\": 12345\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/media/complete",
+          "host": ["{{base_url}}"],
+          "path": ["api","media","complete"]
+        }
+      }
+    },
+    {
+      "name": "Get Media Download URL",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/media/{{media_id}}/download-url",
+          "host": ["{{base_url}}"],
+          "path": ["api","media","{{media_id}}","download-url"]
+        }
+      }
+    },
+    {
+      "name": "Get Media Metadata",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/media/{{media_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api","media","{{media_id}}"]
+        }
+      }
+    }
+  ]
+}
