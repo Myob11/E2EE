@@ -1,0 +1,182 @@
+version: '3.8'
+
+services:
+  # =====================
+  # API Gateway
+  # =====================
+  api_gateway:
+    build:
+      context: ./services/api_gateway
+      dockerfile: Dockerfile
+    container_name: e2ee_api_gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - AUTH_SERVICE_URL=http://auth_service:8001
+      - CHAT_SERVICE_URL=http://chat_service:8002
+      - MESSAGE_SERVICE_URL=http://message_service:8003
+      - MEDIA_SERVICE_URL=http://media_service:8004
+    depends_on:
+      - auth_service
+      - chat_service
+      - message_service
+      - media_service
+    networks:
+      - e2ee_network
+
+  # =====================
+  # Auth Service
+  # =====================
+  auth_service:
+    build:
+      context: ./services/auth_service
+      dockerfile: Dockerfile
+    container_name: e2ee_auth_service
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/auth_db
+      - SECRET_KEY=your-secret-key-change-in-production
+    depends_on:
+      - postgres
+    networks:
+      - e2ee_network
+
+  # =====================
+  # Chat Service
+  # =====================
+  chat_service:
+    build:
+      context: ./services/chat_service
+      dockerfile: Dockerfile
+    container_name: e2ee_chat_service
+    ports:
+      - "8002:8002"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+    networks:
+      - e2ee_network
+
+  # =====================
+  # Message Service
+  # =====================
+  message_service:
+    build:
+      context: ./services/message_service
+      dockerfile: Dockerfile
+    container_name: e2ee_message_service
+    ports:
+      - "8003:8003"
+    environment:
+      - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_DB=messages_db
+    depends_on:
+      - mongodb
+    networks:
+      - e2ee_network
+
+  # =====================
+  # Media Service
+  # =====================
+  media_service:
+    build:
+      context: ./services/media_service
+      dockerfile: Dockerfile
+    container_name: e2ee_media_service
+    ports:
+      - "8004:8004"
+    environment:
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET=media
+      - MINIO_SECURE=false
+    depends_on:
+      - minio
+    networks:
+      - e2ee_network
+
+  # =====================
+  # Databases
+  # =====================
+  postgres:
+    image: postgres:15-alpine
+    container_name: e2ee_postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=auth_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - e2ee_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: e2ee_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - e2ee_network
+
+  mongodb:
+    image: mongo:7
+    container_name: e2ee_mongodb
+    environment:
+      - MONGO_INITDB_DATABASE=messages_db
+    volumes:
+      - mongodb_data:/data/db
+    ports:
+      - "27017:27017"
+    networks:
+      - e2ee_network
+
+  minio:
+    image: minio/minio:latest
+    container_name: e2ee_minio
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - e2ee_network
+
+  # =====================
+  # Monitoring (Optional)
+  # =====================
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   container_name: e2ee_prometheus
+  #   volumes:
+  #     - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+  #   ports:
+  #     - "9090:9090"
+  #   networks:
+  #     - e2ee_network
+
+  # grafana:
+  #   image: grafana/grafana:latest
+  #   container_name: e2ee_grafana
+  #   ports:
+  #     - "3000:3000"
+  #   networks:
+  #     - e2ee_network
+
+networks:
+  e2ee_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  mongodb_data:
+  minio_data:
