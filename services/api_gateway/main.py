@@ -31,6 +31,10 @@ def forward_headers(request: Request):
     return headers
 
 
+def forward_query_params(request: Request):
+    return dict(request.query_params)
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "api_gateway", "domain": DOMAIN}
@@ -137,9 +141,10 @@ async def proxy_create_chat(request: Request):
 async def proxy_get_chats(request: Request):
     """Proxy to chat service - get all chats"""
     headers = forward_headers(request)
+    params = forward_query_params(request)
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(f"{CHAT_SERVICE_URL}/chats", headers=headers)
+            response = await client.get(f"{CHAT_SERVICE_URL}/chats", headers=headers, params=params)
             return response.json()
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Chat service unavailable: {str(e)}")
