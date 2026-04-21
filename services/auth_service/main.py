@@ -8,6 +8,8 @@ import time
 import bcrypt
 import psycopg2
 import psycopg2.extras
+from psycopg2 import sql
+from urllib.parse import urlparse, urlunparse
 import os
 
 app = FastAPI()
@@ -65,6 +67,44 @@ def get_db_conn():
     return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
 
 
+def get_admin_db_url():
+    parsed = urlparse(DATABASE_URL)
+    admin_path = "/postgres"
+    return urlunparse((
+        parsed.scheme,
+        parsed.netloc,
+        admin_path,
+        parsed.params,
+        parsed.query,
+        parsed.fragment,
+    ))
+
+
+def get_target_db_name():
+    parsed = urlparse(DATABASE_URL)
+    return parsed.path.lstrip("/") or "postgres"
+
+
+def ensure_database_exists():
+    db_name = get_target_db_name()
+    if db_name == "postgres":
+        return
+
+    admin_db_url = get_admin_db_url()
+    conn = psycopg2.connect(admin_db_url, cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        conn.autocommit = True
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (db_name,))
+            if not cur.fetchone():
+                cur.execute(sql.SQL("CREATE DATABASE {};").format(sql.Identifier(db_name)))
+        finally:
+            cur.close()
+    finally:
+        conn.close()
+
+
 def wait_for_db(max_retries: int = 10, delay_seconds: int = 2):
     last_error = None
     for _ in range(max_retries):
@@ -73,6 +113,13 @@ def wait_for_db(max_retries: int = 10, delay_seconds: int = 2):
                 return
         except psycopg2.OperationalError as exc:
             last_error = exc
+            error_text = str(exc).lower()
+            if "does not exist" in error_text:
+                try:
+                    ensure_database_exists()
+                    continue
+                except Exception as inner_exc:
+                    last_error = inner_exc
             time.sleep(delay_seconds)
     raise last_error
 

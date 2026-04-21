@@ -178,7 +178,15 @@ Create a new chat (1:1 or group).
 ### Get All Chats
 **Endpoint:** `GET /api/chats`
 
-Get all chats for the current user.
+Get all chats for a specific user. This endpoint returns only chats where the requested user is a member.
+
+**Query Parameters:**
+- `user_id` (required): the ID of the user whose chats should be returned
+
+**Example:**
+`GET /api/chats?user_id=user_1`
+
+> Note: GET requests do not use a request body. The filter is passed as a query parameter.
 
 **Response:**
 ```json

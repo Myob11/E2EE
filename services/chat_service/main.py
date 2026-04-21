@@ -53,8 +53,8 @@ def create_chat(chat: ChatCreate):
     return ChatResponse(**chats_db[chat_id])
 
 @app.get("/chats", response_model=List[ChatResponse])
-def get_chats(user_id: str = "user_1"):
-    """Get all chats for a user"""
+def get_chats(user_id: str):
+    """Get all chats for a user. Only chats where the user is a member are returned."""
     user_chats = []
     for chat in chats_db.values():
         if user_id in chat["member_ids"]:
