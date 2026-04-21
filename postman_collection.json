@@ -199,9 +199,15 @@
           }
         ],
         "url": {
-          "raw": "{{base_url}}/api/chats",
+          "raw": "{{base_url}}/api/chats?user_id={{user_id}}",
           "host": ["{{base_url}}"],
-          "path": ["api","chats"]
+          "path": ["api","chats"],
+          "query": [
+            {
+              "key": "user_id",
+              "value": "{{user_id}}"
+            }
+          ]
         }
       }
     },
