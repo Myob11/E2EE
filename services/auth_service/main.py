@@ -168,6 +168,17 @@ def setup_database():
                 )
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS friends (
+                    id serial PRIMARY KEY,
+                    user_id text NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                    friend_id text NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                    status text NOT NULL DEFAULT 'accepted',
+                    UNIQUE (user_id, friend_id)
+                )
+                """
+            )
 
 
 def create_access_token(data: dict):

@@ -35,6 +35,14 @@ def forward_query_params(request: Request):
     return dict(request.query_params)
 
 
+def build_proxy_response(response):
+    try:
+        content = response.json()
+    except ValueError:
+        content = response.text or {"detail": "Empty upstream response"}
+    return JSONResponse(status_code=response.status_code, content=content)
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "api_gateway", "domain": DOMAIN}
@@ -51,7 +59,7 @@ async def proxy_register(request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(f"{AUTH_SERVICE_URL}/register", json=body)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Auth service unavailable: {str(e)}")
 
@@ -63,7 +71,7 @@ async def proxy_login(request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(f"{AUTH_SERVICE_URL}/login", json=body)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Auth service unavailable: {str(e)}")
 
@@ -75,7 +83,7 @@ async def proxy_get_current_user(request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(f"{AUTH_SERVICE_URL}/users/me", headers=headers)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Auth service unavailable: {str(e)}")
 
@@ -88,7 +96,7 @@ async def proxy_search_users(request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(f"{AUTH_SERVICE_URL}/users", headers=headers, params=params)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Auth service unavailable: {str(e)}")
 
@@ -100,7 +108,7 @@ async def proxy_get_public_key(user_id: str, request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(f"{AUTH_SERVICE_URL}/users/{user_id}/public-key", headers=headers)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Auth service unavailable: {str(e)}")
 
@@ -113,7 +121,7 @@ async def proxy_register_key_bundle(user_id: str, request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(f"{AUTH_SERVICE_URL}/users/{user_id}/keys", json=body, headers=headers)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Auth service unavailable: {str(e)}")
 
@@ -126,7 +134,7 @@ async def proxy_add_friend(user_id: str, request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(f"{AUTH_SERVICE_URL}/users/{user_id}/friends", json=body, headers=headers)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Auth service unavailable: {str(e)}")
 
@@ -138,7 +146,7 @@ async def proxy_list_friends(user_id: str, request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(f"{AUTH_SERVICE_URL}/users/{user_id}/friends", headers=headers)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Auth service unavailable: {str(e)}")
 
@@ -150,7 +158,7 @@ async def proxy_remove_friend(user_id: str, friend_id: str, request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.delete(f"{AUTH_SERVICE_URL}/users/{user_id}/friends/{friend_id}", headers=headers)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Auth service unavailable: {str(e)}")
 
@@ -165,7 +173,7 @@ async def proxy_get_key_bundle(user_id: str, request: Request, device_id: str | 
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Auth service unavailable: {str(e)}")
 
@@ -182,7 +190,7 @@ async def proxy_create_chat(request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(f"{CHAT_SERVICE_URL}/chats", json=body, headers=headers)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Chat service unavailable: {str(e)}")
 
@@ -195,7 +203,7 @@ async def proxy_get_chats(request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(f"{CHAT_SERVICE_URL}/chats", headers=headers, params=params)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Chat service unavailable: {str(e)}")
 
@@ -207,7 +215,7 @@ async def proxy_get_chat(chat_id: str, request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(f"{CHAT_SERVICE_URL}/chats/{chat_id}", headers=headers)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Chat service unavailable: {str(e)}")
 
@@ -220,7 +228,7 @@ async def proxy_add_member(chat_id: str, request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(f"{CHAT_SERVICE_URL}/chats/{chat_id}/members", json=body, headers=headers)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Chat service unavailable: {str(e)}")
 
@@ -232,7 +240,7 @@ async def proxy_remove_member(chat_id: str, user_id: str, request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.delete(f"{CHAT_SERVICE_URL}/chats/{chat_id}/members/{user_id}", headers=headers)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Chat service unavailable: {str(e)}")
 
@@ -249,7 +257,7 @@ async def proxy_send_message(chat_id: str, request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(f"{MESSAGE_SERVICE_URL}/chats/{chat_id}/messages", json=body, headers=headers)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Message service unavailable: {str(e)}")
 
@@ -261,7 +269,7 @@ async def proxy_get_messages(chat_id: str, request: Request, limit: int = 50):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(f"{MESSAGE_SERVICE_URL}/chats/{chat_id}/messages?limit={limit}", headers=headers)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Message service unavailable: {str(e)}")
 
@@ -273,7 +281,7 @@ async def proxy_get_message(message_id: str, request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(f"{MESSAGE_SERVICE_URL}/messages/{message_id}", headers=headers)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Message service unavailable: {str(e)}")
 
@@ -285,7 +293,7 @@ async def proxy_delete_message(message_id: str, request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.delete(f"{MESSAGE_SERVICE_URL}/messages/{message_id}", headers=headers)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Message service unavailable: {str(e)}")
 
@@ -302,7 +310,7 @@ async def proxy_get_upload_url(request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(f"{MEDIA_SERVICE_URL}/media/upload-url", json=body, headers=headers)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Media service unavailable: {str(e)}")
 
@@ -315,7 +323,7 @@ async def proxy_complete_upload(request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(f"{MEDIA_SERVICE_URL}/media/complete", json=body, headers=headers)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Media service unavailable: {str(e)}")
 
@@ -327,7 +335,7 @@ async def proxy_get_download_url(media_id: str, request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(f"{MEDIA_SERVICE_URL}/media/{media_id}/download-url", headers=headers)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Media service unavailable: {str(e)}")
 
@@ -339,6 +347,6 @@ async def proxy_get_media_metadata(media_id: str, request: Request):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(f"{MEDIA_SERVICE_URL}/media/{media_id}", headers=headers)
-            return response.json()
+            return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Media service unavailable: {str(e)}")
