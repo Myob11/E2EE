@@ -433,6 +433,36 @@ def get_user_public_key(user_id: str, device_id: Optional[str] = None):
 
     return {"user_id": user_id, "public_key": user.get("public_key")}
 
+
+@app.get("/users", response_model=List[FriendUserResponse])
+def search_users(query: str, current_user_id: str = Depends(parse_bearer_token)):
+    """Search registered users by username prefix."""
+    # Require authentication to search users.
+    if not current_user_id:
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+
+    with get_db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT user_id, username, public_key, registration_id "
+                "FROM users "
+                "WHERE username ILIKE %s "
+                "ORDER BY username ASC "
+                "LIMIT 50",
+                (query + "%",),
+            )
+            rows = cur.fetchall()
+
+    return [
+        FriendUserResponse(
+            id=row["user_id"],
+            username=row["username"],
+            public_key=row.get("public_key"),
+            registration_id=row.get("registration_id"),
+        )
+        for row in rows
+    ]
+
 @app.post("/users/{user_id}/friends", response_model=FriendResponse)
 def add_friend(user_id: str, friend: FriendCreate, current_user_id: str = Depends(parse_bearer_token)):
     """Add a friend relationship for the current user."""

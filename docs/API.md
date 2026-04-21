@@ -99,6 +99,28 @@ Get a user's public key for E2EE encryption.
 
 ---
 
+### Search Users
+**Endpoint:** `GET /api/users?query={username_prefix}`
+
+Search for users by username prefix. This is intended for friend search in the frontend.
+
+**Headers:**
+- `Authorization: Bearer {{auth_token}}`
+
+**Response:**
+```json
+[
+  {
+    "id": "user_2",
+    "username": "alice",
+    "public_key": "string",
+    "registration_id": 12345
+  }
+]
+```
+
+---
+
 ### Register Signal Key Bundle
 **Endpoint:** `POST /api/users/{user_id}/keys`
 

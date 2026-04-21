@@ -80,6 +80,19 @@ async def proxy_get_current_user(request: Request):
             raise HTTPException(status_code=503, detail=f"Auth service unavailable: {str(e)}")
 
 
+@app.get("/api/users")
+async def proxy_search_users(request: Request):
+    """Proxy to auth service - search users"""
+    headers = forward_headers(request)
+    params = forward_query_params(request)
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(f"{AUTH_SERVICE_URL}/users", headers=headers, params=params)
+            return response.json()
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"Auth service unavailable: {str(e)}")
+
+
 @app.get("/api/users/{user_id}/public-key")
 async def proxy_get_public_key(user_id: str, request: Request):
     """Proxy to auth service - get user public key"""

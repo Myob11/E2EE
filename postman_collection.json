@@ -212,6 +212,29 @@
       }
     },
     {
+      "name": "Search Users",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/users?query={{search_username}}",
+          "host": ["{{base_url}}"],
+          "path": ["api","users"],
+          "query": [
+            {
+              "key": "query",
+              "value": "{{search_username}}"
+            }
+          ]
+        }
+      }
+    },
+    {
       "name": "Create Chat",
       "request": {
         "method": "POST",
