@@ -46,6 +46,20 @@ class UserResponse(BaseModel):
     public_key: Optional[str] = None
     registration_id: Optional[int] = None
 
+class FriendCreate(BaseModel):
+    friend_id: str
+
+class FriendResponse(BaseModel):
+    user_id: str
+    friend_id: str
+    status: str
+
+class FriendUserResponse(BaseModel):
+    id: str
+    username: str
+    public_key: Optional[str] = None
+    registration_id: Optional[int] = None
+
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -186,6 +200,47 @@ def get_device(user_id: str, device_id: str):
                 (user_id, device_id),
             )
             return cur.fetchone()
+
+
+def get_friends(user_id: str):
+    with get_db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT u.user_id, u.username, u.public_key, u.registration_id "
+                "FROM friends f "
+                "JOIN users u ON u.user_id = f.friend_id "
+                "WHERE f.user_id = %s",
+                (user_id,),
+            )
+            return cur.fetchall()
+
+
+def friend_exists(user_id: str, friend_id: str):
+    with get_db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM friends WHERE user_id = %s AND friend_id = %s",
+                (user_id, friend_id),
+            )
+            return cur.fetchone() is not None
+
+
+def add_friend_relation(user_id: str, friend_id: str):
+    with get_db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO friends (user_id, friend_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                (user_id, friend_id),
+            )
+
+
+def remove_friend_relation(user_id: str, friend_id: str):
+    with get_db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM friends WHERE user_id = %s AND friend_id = %s",
+                (user_id, friend_id),
+            )
 
 
 def get_first_device(user_id: str):
@@ -377,3 +432,54 @@ def get_user_public_key(user_id: str, device_id: Optional[str] = None):
         }
 
     return {"user_id": user_id, "public_key": user.get("public_key")}
+
+@app.post("/users/{user_id}/friends", response_model=FriendResponse)
+def add_friend(user_id: str, friend: FriendCreate, current_user_id: str = Depends(parse_bearer_token)):
+    """Add a friend relationship for the current user."""
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot manage friends for another user")
+
+    if user_id == friend.friend_id:
+        raise HTTPException(status_code=400, detail="Cannot add yourself as a friend")
+
+    if not get_user_by_id(user_id) or not get_user_by_id(friend.friend_id):
+        raise HTTPException(status_code=404, detail="User or friend not found")
+
+    add_friend_relation(user_id, friend.friend_id)
+    add_friend_relation(friend.friend_id, user_id)
+    return FriendResponse(user_id=user_id, friend_id=friend.friend_id, status="accepted")
+
+
+@app.get("/users/{user_id}/friends", response_model=List[FriendUserResponse])
+def list_friends(user_id: str, current_user_id: str = Depends(parse_bearer_token)):
+    """List friends for the current user."""
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot view friends for another user")
+
+    if not get_user_by_id(user_id):
+        raise HTTPException(status_code=404, detail="User not found")
+
+    friends = get_friends(user_id)
+    return [
+        FriendUserResponse(
+            id=friend["user_id"],
+            username=friend["username"],
+            public_key=friend.get("public_key"),
+            registration_id=friend.get("registration_id"),
+        )
+        for friend in friends
+    ]
+
+
+@app.delete("/users/{user_id}/friends/{friend_id}")
+def remove_friend(user_id: str, friend_id: str, current_user_id: str = Depends(parse_bearer_token)):
+    """Remove a friend relationship."""
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot remove friends for another user")
+
+    if not get_user_by_id(user_id) or not get_user_by_id(friend_id):
+        raise HTTPException(status_code=404, detail="User or friend not found")
+
+    remove_friend_relation(user_id, friend_id)
+    remove_friend_relation(friend_id, user_id)
+    return {"user_id": user_id, "friend_id": friend_id, "status": "removed"}

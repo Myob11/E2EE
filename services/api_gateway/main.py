@@ -105,6 +105,43 @@ async def proxy_register_key_bundle(user_id: str, request: Request):
             raise HTTPException(status_code=503, detail=f"Auth service unavailable: {str(e)}")
 
 
+@app.post("/api/users/{user_id}/friends")
+async def proxy_add_friend(user_id: str, request: Request):
+    """Proxy to auth service - add friend"""
+    body = await request.json()
+    headers = forward_headers(request)
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(f"{AUTH_SERVICE_URL}/users/{user_id}/friends", json=body, headers=headers)
+            return response.json()
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"Auth service unavailable: {str(e)}")
+
+
+@app.get("/api/users/{user_id}/friends")
+async def proxy_list_friends(user_id: str, request: Request):
+    """Proxy to auth service - list friends"""
+    headers = forward_headers(request)
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(f"{AUTH_SERVICE_URL}/users/{user_id}/friends", headers=headers)
+            return response.json()
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"Auth service unavailable: {str(e)}")
+
+
+@app.delete("/api/users/{user_id}/friends/{friend_id}")
+async def proxy_remove_friend(user_id: str, friend_id: str, request: Request):
+    """Proxy to auth service - remove friend"""
+    headers = forward_headers(request)
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.delete(f"{AUTH_SERVICE_URL}/users/{user_id}/friends/{friend_id}", headers=headers)
+            return response.json()
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"Auth service unavailable: {str(e)}")
+
+
 @app.get("/api/users/{user_id}/bundle")
 async def proxy_get_key_bundle(user_id: str, request: Request, device_id: str | None = None):
     """Proxy to auth service - get Signal key bundle"""

@@ -126,6 +126,64 @@ Register or refresh a Signal-style key bundle for a user device.
 
 ---
 
+### Add Friend
+**Endpoint:** `POST /api/users/{user_id}/friends`
+
+Add a friend relationship for the authenticated user.
+
+**Request Body:**
+```json
+{
+  "friend_id": "user_2"
+}
+```
+
+**Response:**
+```json
+{
+  "user_id": "user_1",
+  "friend_id": "user_2",
+  "status": "accepted"
+}
+```
+
+---
+
+### List Friends
+**Endpoint:** `GET /api/users/{user_id}/friends`
+
+List friends for the authenticated user.
+
+**Response:**
+```json
+[
+  {
+    "id": "user_2",
+    "username": "alice",
+    "public_key": "string",
+    "registration_id": 12345
+  }
+]
+```
+
+---
+
+### Remove Friend
+**Endpoint:** `DELETE /api/users/{user_id}/friends/{friend_id}`
+
+Remove an existing friend relationship.
+
+**Response:**
+```json
+{
+  "user_id": "user_1",
+  "friend_id": "user_2",
+  "status": "removed"
+}
+```
+
+---
+
 ### Get User Key Bundle
 **Endpoint:** `GET /api/users/{user_id}/bundle`
 
