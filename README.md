@@ -46,10 +46,31 @@ flowchart TD
 The project includes a precise Signal-style encryption workflow diagram.
 The diagram shows:
 - client-side key generation and bundle registration
+- friend discovery and friend management (search/add/list/remove)
 - recipient bundle retrieval
 - local encryption before sending
 - storage of ciphertext in the message service
 - local decryption after retrieval
+
+### API calling flowchart (friend + chat flow)
+
+```mermaid
+flowchart TD
+    A[Client starts session] --> B[POST /api/auth/login]
+    B --> C{Token valid?}
+    C -- no --> Z[Show auth error]
+    C -- yes --> D[GET /api/users?query=prefix]
+    D --> E{Friend found?}
+    E -- no --> E1[Refine query and retry]
+    E1 --> D
+    E -- yes --> F[POST /api/users/:id/friends]
+    F --> G[GET /api/users/:id/friends]
+    G --> H[GET /api/users/:id/bundle]
+    H --> I[Encrypt locally with Signal]
+    I --> J[POST /api/chats/:chatId/messages]
+    J --> K[GET /api/chats/:chatId/messages]
+    K --> L[Decrypt locally]
+```
 
 ```mermaid
 sequenceDiagram
@@ -73,6 +94,34 @@ sequenceDiagram
     PG-->>Auth: user record
     Auth-->>Gateway: access_token
     Gateway-->>Client: JWT
+
+    Client->>Gateway: GET /api/users?query=ali
+    Gateway->>Auth: GET /users?query=ali
+    Auth->>PG: SELECT users WHERE username LIKE 'ali%'
+    PG-->>Auth: user candidates
+    Auth-->>Gateway: users[]
+    Gateway-->>Client: users[]
+
+    Client->>Gateway: POST /api/users/{user_id}/friends
+    Gateway->>Auth: POST /users/{user_id}/friends
+    Auth->>PG: INSERT friendship(user_id, friend_id)
+    PG-->>Auth: friendship saved
+    Auth-->>Gateway: status accepted
+    Gateway-->>Client: friend added
+
+    Client->>Gateway: GET /api/users/{user_id}/friends
+    Gateway->>Auth: GET /users/{user_id}/friends
+    Auth->>PG: SELECT friends by user_id
+    PG-->>Auth: friends[]
+    Auth-->>Gateway: friends[]
+    Gateway-->>Client: friends[]
+
+    Client->>Gateway: DELETE /api/users/{user_id}/friends/{friend_id}
+    Gateway->>Auth: DELETE /users/{user_id}/friends/{friend_id}
+    Auth->>PG: DELETE friendship
+    PG-->>Auth: removed
+    Auth-->>Gateway: status removed
+    Gateway-->>Client: friend removed
 
     Client->>Gateway: POST /api/users/{user_id}/keys
     Note right of Client: generate identity, signed prekey, one-time prekeys locally
@@ -117,6 +166,8 @@ You can export the diagram with Mermaid tools:
 ### 3.1 Auth service
 - Registracija, prijava, osvezevanje tokenov.
 - Upravljanje uporabniskih profilov in javnih kljucev.
+- Iskanje uporabnikov in upravljanje prijateljev.
+- Signal key bundle endpointi (identity key, signed prekey, one-time prekeys).
 - Relacijska baza (npr. PostgreSQL/MySQL) za uporabnike.
 
 ### 3.2 Chat service
@@ -151,6 +202,14 @@ You can export the diagram with Mermaid tools:
 - POST /api/auth/refresh
 - GET /api/users/me
 - GET /api/users/:id/public-key
+- GET /api/users?query=:usernamePrefix
+- POST /api/users/:id/keys
+- GET /api/users/:id/bundle
+
+### Friends
+- POST /api/users/:id/friends
+- GET /api/users/:id/friends
+- DELETE /api/users/:id/friends/:friendId
 
 ### Chat
 - POST /api/chats
@@ -169,6 +228,16 @@ You can export the diagram with Mermaid tools:
 - POST /api/media/upload-url
 - POST /api/media/complete
 - GET /api/media/:mediaId/download-url
+
+### API calling notes
+- Vsi endpointi razen `/health` in `/api/auth/register` potrebujejo `Authorization: Bearer <JWT>` header.
+- `GET` endpointi uporabljajo query parametre (npr. `/api/chats?user_id=...`), ne request body.
+- Za prijatelje priporocen vrstni red klicev je:
+    1. `GET /api/users?query=...`
+    2. `POST /api/users/:id/friends`
+    3. `GET /api/users/:id/friends`
+    4. (opcijsko) `DELETE /api/users/:id/friends/:friendId`
+- Za hiter smoke test API-ja uporabi `postman_collection.json` + `postman_environment.json` iz repozitorija.
 
 ## 5. Podatkovni sloj
 
