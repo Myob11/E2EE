@@ -174,50 +174,14 @@ You can export the diagram with Mermaid tools:
 - TLS terminacija, DNS, caching staticnih vsebin.
 - Zascita pred osnovnimi DDoS napadi.
 
-## 4. Predlagani API klici (Mejnik 2)
+## 4. API dokumentacija
 
-### Auth
-- POST /api/auth/register
-- POST /api/auth/login
-- POST /api/auth/refresh
-- GET /api/users/me
-- GET /api/users/:id/public-key
-- GET /api/users?query=:usernamePrefix
-- POST /api/users/:id/keys
-- GET /api/users/:id/bundle
+Podrobna in azurna API dokumentacija je v mapi docs:
+- [docs/API.md](docs/API.md)
 
-### Friends
-- POST /api/users/:id/friends
-- GET /api/users/:id/friends
-- DELETE /api/users/:id/friends/:friendId
-
-### Chat
-- POST /api/chats
-- GET /api/chats
-- GET /api/chats/:chatId
-- POST /api/chats/:chatId/members
-- DELETE /api/chats/:chatId/members/:userId
-
-### Message
-- POST /api/chats/:chatId/messages
-- GET /api/chats/:chatId/messages?cursor=...&limit=...
-- GET /api/messages/:messageId
-- DELETE /api/messages/:messageId
-
-### Media
-- POST /api/media/upload-url
-- POST /api/media/complete
-- GET /api/media/:mediaId/download-url
-
-### API calling notes
-- Vsi endpointi razen `/health` in `/api/auth/register` potrebujejo `Authorization: Bearer <JWT>` header.
-- `GET` endpointi uporabljajo query parametre (npr. `/api/chats?user_id=...`), ne request body.
-- Za prijatelje priporocen vrstni red klicev je:
-    1. `GET /api/users?query=...`
-    2. `POST /api/users/:id/friends`
-    3. `GET /api/users/:id/friends`
-    4. (opcijsko) `DELETE /api/users/:id/friends/:friendId`
-- Za hiter smoke test API-ja uporabi `postman_collection.json` + `postman_environment.json` iz repozitorija.
+Za prakticno testiranje endpointov uporabi:
+- [postman_collection.json](postman_collection.json)
+- [postman_environment.json](postman_environment.json)
 
 ## 5. Podatkovni sloj
 
