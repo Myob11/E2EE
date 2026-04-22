@@ -75,6 +75,7 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - SECRET_KEY=your-secret-key-change-in-production
     depends_on:
       - redis
     networks:
@@ -94,8 +95,11 @@ services:
     environment:
       - MONGODB_URL=mongodb://mongodb:27017
       - MONGODB_DB=messages_db
+      - CHAT_SERVICE_URL=http://e2ee_chat_service:8002
+      - SECRET_KEY=your-secret-key-change-in-production
     depends_on:
       - mongodb
+      - chat_service
     networks:
       - e2ee_network
     restart: unless-stopped

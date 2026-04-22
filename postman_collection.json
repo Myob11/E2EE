@@ -4,6 +4,52 @@
     "description": "Postman collection for E2EE Chat App microservices through API Gateway.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "variable": [
+    {
+      "key": "api_prefix",
+      "value": "/api"
+    },
+    {
+      "key": "register_username",
+      "value": "alice"
+    },
+    {
+      "key": "register_password",
+      "value": "Secret123!"
+    },
+    {
+      "key": "friend_username",
+      "value": "bob"
+    },
+    {
+      "key": "chat_name",
+      "value": "Test Chat"
+    },
+    {
+      "key": "message_text",
+      "value": "Hello from Postman"
+    },
+    {
+      "key": "media_filename",
+      "value": "photo.jpg"
+    },
+    {
+      "key": "media_content_type",
+      "value": "image/jpeg"
+    },
+    {
+      "key": "media_size",
+      "value": "12345"
+    },
+    {
+      "key": "device_id",
+      "value": "android-phone-1"
+    },
+    {
+      "key": "message_limit",
+      "value": "50"
+    }
+  ],
   "item": [
     {
       "name": "Health",
@@ -29,7 +75,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"username\": \"alice\",\n  \"password\": \"Secret123!\",\n  \"public_key\": \"BASE64_PUBLIC_KEY\"\n}"
+          "raw": "{\n  \"username\": \"{{register_username}}\",\n  \"password\": \"{{register_password}}\",\n  \"public_key\": \"BASE64_PUBLIC_KEY\"\n}"
         },
         "url": {
           "raw": "{{base_url}}/api/auth/register",
@@ -61,7 +107,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"username\": \"alice\",\n  \"password\": \"Secret123!\"\n}"
+          "raw": "{\n  \"username\": \"{{register_username}}\",\n  \"password\": \"{{register_password}}\"\n}"
         },
         "url": {
           "raw": "{{base_url}}/api/auth/login",
@@ -126,7 +172,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"identity_key\": \"BASE64_IDENTITY_KEY\",\n  \"signed_prekey\": \"BASE64_SIGNED_PREKEY\",\n  \"one_time_prekeys\": [\"ONE_TIME_PREKEY_1\", \"ONE_TIME_PREKEY_2\"],\n  \"registration_id\": 12345,\n  \"device_id\": \"android-phone-1\"\n}"
+          "raw": "{\n  \"identity_key\": \"BASE64_IDENTITY_KEY\",\n  \"signed_prekey\": \"BASE64_SIGNED_PREKEY\",\n  \"one_time_prekeys\": [\"ONE_TIME_PREKEY_1\", \"ONE_TIME_PREKEY_2\"],\n  \"registration_id\": 12345,\n  \"device_id\": \"{{device_id}}\"\n}"
         },
         "url": {
           "raw": "{{base_url}}/api/users/{{user_id}}/keys",
@@ -250,7 +296,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"name\": \"Test Chat\",\n  \"member_ids\": [\"{{user_id}}\"],\n  \"is_group\": false\n}"
+          "raw": "{\n  \"name\": \"{{chat_name}}\",\n  \"member_ids\": [\"{{user_id}}\", \"{{friend_id}}\"],\n  \"is_group\": false\n}"
         },
         "url": {
           "raw": "{{base_url}}/api/chats",
@@ -281,7 +327,7 @@
           }
         ],
         "url": {
-          "raw": "{{base_url}}/api/chats?user_id={{user_id}}",
+          "raw": "{{base_url}}{{api_prefix}}/chats?user_id={{user_id}}",
           "host": ["{{base_url}}"],
           "path": ["api","chats"],
           "query": [
@@ -326,7 +372,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"user_id\": \"{{user_id}}\"\n}"
+          "raw": "{\n  \"user_id\": \"{{friend_id}}\"\n}"
         },
         "url": {
           "raw": "{{base_url}}/api/chats/{{chat_id}}/members",
@@ -368,7 +414,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"chat_id\": \"{{chat_id}}\",\n  \"sender_id\": \"{{user_id}}\",\n  \"ciphertext\": \"BASE64_CIPHERTEXT\",\n  \"message_type\": \"text\",\n  \"metadata\": {}\n}"
+          "raw": "{\n  \"chat_id\": \"{{chat_id}}\",\n  \"sender_id\": \"{{user_id}}\",\n  \"ciphertext\": \"BASE64_CIPHERTEXT\",\n  \"message_type\": \"text\",\n  \"metadata\": {\n    \"plaintext_preview\": \"{{message_text}}\"\n  }\n}"
         },
         "url": {
           "raw": "{{base_url}}/api/chats/{{chat_id}}/messages",
@@ -399,13 +445,13 @@
           }
         ],
         "url": {
-          "raw": "{{base_url}}/api/chats/{{chat_id}}/messages?limit=50",
+          "raw": "{{base_url}}/api/chats/{{chat_id}}/messages?limit={{message_limit}}",
           "host": ["{{base_url}}"],
           "path": ["api","chats","{{chat_id}}","messages"],
           "query": [
             {
               "key": "limit",
-              "value": "50"
+              "value": "{{message_limit}}"
             }
           ]
         }
@@ -461,7 +507,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"filename\": \"photo.jpg\",\n  \"content_type\": \"image/jpeg\",\n  \"user_id\": \"{{user_id}}\"\n}"
+          "raw": "{\n  \"filename\": \"{{media_filename}}\",\n  \"content_type\": \"{{media_content_type}}\",\n  \"user_id\": \"{{user_id}}\"\n}"
         },
         "url": {
           "raw": "{{base_url}}/api/media/upload-url",
@@ -497,7 +543,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"media_id\": \"{{media_id}}\",\n  \"size\": 12345\n}"
+          "raw": "{\n  \"media_id\": \"{{media_id}}\",\n  \"size\": {{media_size}}\n}"
         },
         "url": {
           "raw": "{{base_url}}/api/media/complete",
