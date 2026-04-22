@@ -52,26 +52,6 @@ The diagram shows:
 - storage of ciphertext in the message service
 - local decryption after retrieval
 
-### API calling flowchart (friend + chat flow)
-
-```mermaid
-flowchart TD
-    A[Client starts session] --> B[POST /api/auth/login]
-    B --> C{Token valid?}
-    C -- no --> Z[Show auth error]
-    C -- yes --> D[GET /api/users?query=prefix]
-    D --> E{Friend found?}
-    E -- no --> E1[Refine query and retry]
-    E1 --> D
-    E -- yes --> F[POST /api/users/:id/friends]
-    F --> G[GET /api/users/:id/friends]
-    G --> H[GET /api/users/:id/bundle]
-    H --> I[Encrypt locally with Signal]
-    I --> J[POST /api/chats/:chatId/messages]
-    J --> K[GET /api/chats/:chatId/messages]
-    K --> L[Decrypt locally]
-```
-
 ```mermaid
 sequenceDiagram
     participant Client as Mobile App
