@@ -95,10 +95,13 @@ services:
     environment:
       - MONGODB_URL=mongodb://mongodb:27017
       - MONGODB_DB=messages_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - CHAT_SERVICE_URL=http://e2ee_chat_service:8002
       - SECRET_KEY=your-secret-key-change-in-production
     depends_on:
       - mongodb
+      - redis
       - chat_service
     networks:
       - e2ee_network
@@ -148,6 +151,9 @@ services:
   redis:
     image: redis:7-alpine
     container_name: e2ee_redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
     ports:
       - "6379:6379"
     networks:
@@ -191,3 +197,4 @@ volumes:
   postgres_data:
   mongodb_data:
   minio_data:
+  redis_data:

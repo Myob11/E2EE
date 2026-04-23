@@ -301,6 +301,86 @@ Get a specific chat by ID.
 
 ---
 
+## Message Service
+
+### Get Messages
+**Endpoint:** `GET /api/chats/{chat_id}/messages`
+
+Get messages for a chat. Each returned message now contains `is_read` for the authenticated user.
+
+**Query Parameters:**
+- `limit` (optional, default `50`)
+- `before` (optional ISO timestamp cursor, example: `2026-04-23T15:09:47.789130Z`)
+
+**Response:**
+```json
+[
+  {
+    "id": "msg_f5349dcf",
+    "chat_id": "chat_4c0edcbd",
+    "sender_id": "user_10",
+    "ciphertext": "test-ciphertext",
+    "message_type": "text",
+    "created_at": "2026-04-23T15:09:47.789130Z",
+    "is_read": true
+  }
+]
+```
+
+---
+
+### Get Single Message
+**Endpoint:** `GET /api/messages/{message_id}`
+
+Returns one message including `is_read` for the authenticated user.
+
+**Response:**
+```json
+{
+  "id": "msg_f5349dcf",
+  "chat_id": "chat_4c0edcbd",
+  "sender_id": "user_10",
+  "ciphertext": "test-ciphertext",
+  "message_type": "text",
+  "created_at": "2026-04-23T15:09:47.789130Z",
+  "is_read": false
+}
+```
+
+---
+
+### Mark Message As Read
+**Endpoint:** `POST /api/messages/{message_id}/read`
+
+Marks the message as read for the authenticated user.
+
+**Response:**
+```json
+{
+  "message_id": "msg_f5349dcf",
+  "user_id": "user_11",
+  "is_read": true
+}
+```
+
+---
+
+### Get Read Status For Current User
+**Endpoint:** `GET /api/messages/{message_id}/read`
+
+Returns whether the authenticated user has read the message.
+
+**Response:**
+```json
+{
+  "message_id": "msg_f5349dcf",
+  "user_id": "user_11",
+  "is_read": true
+}
+```
+
+---
+
 ### Add Member to Chat
 **Endpoint:** `POST /api/chats/{chat_id}/members`
 

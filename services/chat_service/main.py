@@ -8,6 +8,8 @@ import hashlib
 import hmac
 import json
 from datetime import datetime, timezone
+import redis
+from redis.exceptions import RedisError
 
 app = FastAPI()
 
@@ -17,9 +19,32 @@ REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
 
-# In-memory chat storage (for testing without Redis)
-chats_db = {}
-chat_members_db = {}
+
+def get_redis_conn():
+    try:
+        return redis.Redis(
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            decode_responses=True,
+            socket_timeout=3,
+        )
+    except RedisError:
+        raise HTTPException(status_code=503, detail="Redis unavailable")
+
+
+def _chat_key(chat_id: str) -> str:
+    return f"chat:{chat_id}"
+
+
+def _user_chats_key(user_id: str) -> str:
+    return f"user_chats:{user_id}"
+
+
+def _get_chat_or_404(client: redis.Redis, chat_id: str) -> dict:
+    payload = client.get(_chat_key(chat_id))
+    if not payload:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    return json.loads(payload)
 
 # Pydantic models
 class ChatCreate(BaseModel):
@@ -78,23 +103,32 @@ def health():
 @app.post("/chats", response_model=ChatResponse)
 def create_chat(chat: ChatCreate, current_user_id: str = Depends(parse_bearer_token)):
     """Create a new chat (1:1 or group)"""
-    if current_user_id not in chat.member_ids:
-        chat.member_ids = [current_user_id, *chat.member_ids]
+    client = get_redis_conn()
+
+    unique_member_ids = list(dict.fromkeys(chat.member_ids))
+    if current_user_id not in unique_member_ids:
+        unique_member_ids = [current_user_id, *unique_member_ids]
 
     chat_id = f"chat_{uuid.uuid4().hex[:8]}"
-    
-    chats_db[chat_id] = {
+
+    chat_payload = {
         "id": chat_id,
         "name": chat.name,
         "is_group": chat.is_group,
-        "member_ids": chat.member_ids,
-        "created_at": "2026-04-20T12:00:00Z"
+        "member_ids": unique_member_ids,
+        "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
-    
-    # Store members
-    chat_members_db[chat_id] = chat.member_ids
-    
-    return ChatResponse(**chats_db[chat_id])
+
+    try:
+        pipe = client.pipeline()
+        pipe.set(_chat_key(chat_id), json.dumps(chat_payload))
+        for member_id in unique_member_ids:
+            pipe.sadd(_user_chats_key(member_id), chat_id)
+        pipe.execute()
+    except RedisError:
+        raise HTTPException(status_code=503, detail="Redis unavailable")
+
+    return ChatResponse(**chat_payload)
 
 @app.get("/chats", response_model=List[ChatResponse])
 def get_chats(user_id: str, current_user_id: str = Depends(parse_bearer_token)):
@@ -102,49 +136,77 @@ def get_chats(user_id: str, current_user_id: str = Depends(parse_bearer_token)):
     if current_user_id != user_id:
         raise HTTPException(status_code=403, detail="Cannot view chats for another user")
 
-    user_chats = []
-    for chat in chats_db.values():
-        if user_id in chat["member_ids"]:
-            user_chats.append(ChatResponse(**chat))
-    return user_chats
+    client = get_redis_conn()
+    try:
+        chat_ids = sorted(client.smembers(_user_chats_key(user_id)))
+        user_chats = []
+        for chat_id in chat_ids:
+            payload = client.get(_chat_key(chat_id))
+            if not payload:
+                continue
+            user_chats.append(ChatResponse(**json.loads(payload)))
+        return user_chats
+    except RedisError:
+        raise HTTPException(status_code=503, detail="Redis unavailable")
 
 @app.get("/chats/{chat_id}", response_model=ChatResponse)
 def get_chat(chat_id: str, current_user_id: str = Depends(parse_bearer_token)):
     """Get a specific chat"""
-    if chat_id not in chats_db:
-        raise HTTPException(status_code=404, detail="Chat not found")
+    client = get_redis_conn()
+    try:
+        chat = _get_chat_or_404(client, chat_id)
+    except RedisError:
+        raise HTTPException(status_code=503, detail="Redis unavailable")
 
-    if current_user_id not in chats_db[chat_id]["member_ids"]:
+    if current_user_id not in chat["member_ids"]:
         raise HTTPException(status_code=403, detail="Cannot access a chat you are not a member of")
 
-    return ChatResponse(**chats_db[chat_id])
+    return ChatResponse(**chat)
 
 @app.post("/chats/{chat_id}/members")
 def add_member(chat_id: str, request: AddMemberRequest, current_user_id: str = Depends(parse_bearer_token)):
     """Add a member to a chat"""
-    if chat_id not in chats_db:
-        raise HTTPException(status_code=404, detail="Chat not found")
+    client = get_redis_conn()
+    try:
+        chat = _get_chat_or_404(client, chat_id)
+    except RedisError:
+        raise HTTPException(status_code=503, detail="Redis unavailable")
 
-    if current_user_id not in chats_db[chat_id]["member_ids"]:
+    if current_user_id not in chat["member_ids"]:
         raise HTTPException(status_code=403, detail="Cannot add members to a chat you are not part of")
-    
-    if request.user_id not in chats_db[chat_id]["member_ids"]:
-        chats_db[chat_id]["member_ids"].append(request.user_id)
-        chat_members_db[chat_id] = chats_db[chat_id]["member_ids"]
+
+    if request.user_id not in chat["member_ids"]:
+        chat["member_ids"].append(request.user_id)
+        try:
+            pipe = client.pipeline()
+            pipe.set(_chat_key(chat_id), json.dumps(chat))
+            pipe.sadd(_user_chats_key(request.user_id), chat_id)
+            pipe.execute()
+        except RedisError:
+            raise HTTPException(status_code=503, detail="Redis unavailable")
     
     return {"message": "Member added", "chat_id": chat_id, "user_id": request.user_id}
 
 @app.delete("/chats/{chat_id}/members/{user_id}")
 def remove_member(chat_id: str, user_id: str, current_user_id: str = Depends(parse_bearer_token)):
     """Remove a member from a chat"""
-    if chat_id not in chats_db:
-        raise HTTPException(status_code=404, detail="Chat not found")
+    client = get_redis_conn()
+    try:
+        chat = _get_chat_or_404(client, chat_id)
+    except RedisError:
+        raise HTTPException(status_code=503, detail="Redis unavailable")
 
-    if current_user_id not in chats_db[chat_id]["member_ids"]:
+    if current_user_id not in chat["member_ids"]:
         raise HTTPException(status_code=403, detail="Cannot remove members from a chat you are not part of")
-    
-    if user_id in chats_db[chat_id]["member_ids"]:
-        chats_db[chat_id]["member_ids"].remove(user_id)
-        chat_members_db[chat_id] = chats_db[chat_id]["member_ids"]
+
+    if user_id in chat["member_ids"]:
+        chat["member_ids"].remove(user_id)
+        try:
+            pipe = client.pipeline()
+            pipe.set(_chat_key(chat_id), json.dumps(chat))
+            pipe.srem(_user_chats_key(user_id), chat_id)
+            pipe.execute()
+        except RedisError:
+            raise HTTPException(status_code=503, detail="Redis unavailable")
     
     return {"message": "Member removed", "chat_id": chat_id, "user_id": user_id}
