@@ -378,6 +378,7 @@ Get messages for a chat with pagination.
 
 **Query Parameters:**
 - `limit` (optional, default: 50)
+- `before` (optional, ISO-8601 UTC timestamp; returns messages older than this cursor)
 
 **Response:**
 ```json
@@ -391,6 +392,12 @@ Get messages for a chat with pagination.
     "created_at": "2026-04-20T12:00:00Z"
   }
 ]
+```
+
+Example request:
+```http
+GET /api/chats/chat_abc123/messages?limit=20&before=2026-04-20T12:00:00Z
+Authorization: Bearer <token>
 ```
 
 ---

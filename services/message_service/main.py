@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Header, Depends
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import os
 import base64
@@ -36,6 +36,16 @@ class MessageResponse(BaseModel):
     ciphertext: str
     message_type: str
     created_at: str
+
+
+def _parse_utc_timestamp(value: str) -> datetime:
+    try:
+        parsed_value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed_value.tzinfo is None:
+            return parsed_value.replace(tzinfo=timezone.utc)
+        return parsed_value
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid before timestamp")
 
 
 def _base64url_decode(data: str) -> bytes:
@@ -127,7 +137,7 @@ def send_message(chat_id: str, message: MessageCreate, authorization: str = Head
         "sender_id": message.sender_id,
         "ciphertext": message.ciphertext,
         "message_type": message.message_type,
-        "created_at": datetime.utcnow().isoformat() + "Z"
+        "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     }
     
     return MessageResponse(**messages_db[message_id])
@@ -141,15 +151,20 @@ def get_messages(chat_id: str, limit: int = 50, before: Optional[str] = None, au
     ensure_chat_membership(chat_id, current_user_id, authorization)
 
     chat_messages = [
-        MessageResponse(**msg) for msg in messages_db.values()
+        msg for msg in messages_db.values()
         if msg["chat_id"] == chat_id
     ]
-    
-    # Sort by created_at descending (newest first)
-    chat_messages.sort(key=lambda x: x.created_at, reverse=True)
-    
-    # Apply limit
-    return chat_messages[:limit]
+
+    if before:
+        before_timestamp = _parse_utc_timestamp(before)
+        chat_messages = [
+            msg for msg in chat_messages
+            if _parse_utc_timestamp(msg["created_at"]) < before_timestamp
+        ]
+
+    chat_messages.sort(key=lambda msg: _parse_utc_timestamp(msg["created_at"]), reverse=True)
+
+    return [MessageResponse(**msg) for msg in chat_messages[:limit]]
 
 @app.get("/messages/{message_id}", response_model=MessageResponse)
 def get_message(message_id: str, authorization: str = Header(None), current_user_id: str = Depends(parse_bearer_token)):
