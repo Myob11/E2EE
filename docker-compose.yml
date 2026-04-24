@@ -34,11 +34,15 @@ services:
       - MESSAGE_SERVICE_URL=http://e2ee_message_service:8003
       - MEDIA_SERVICE_URL=http://e2ee_media_service:8004
       - DOMAIN=secra.top
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SECRET_KEY=your-secret-key-change-in-production
     depends_on:
       - auth_service
       - chat_service
       - message_service
       - media_service
+      - redis
     networks:
       - e2ee_network
     restart: unless-stopped

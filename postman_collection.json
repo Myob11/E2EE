@@ -48,6 +48,10 @@
     {
       "key": "message_limit",
       "value": "50"
+    },
+    {
+      "key": "wss_base_url",
+      "value": "wss://secra.top"
     }
   ],
   "item": [
@@ -585,6 +589,13 @@
           "path": ["api","media","{{media_id}}"]
         }
       }
+    },
+    {
+      "name": "WSS Chat Stream",
+      "request": {
+        "url": "{{wss_base_url}}/ws/chats/{{chat_id}}?token={{auth_token}}"
+      },
+      "description": "Open the realtime chat stream in Postman WebSocket mode. The server sends a connected event first, then message.new events for new messages in the chat."
     }
   ]
 }

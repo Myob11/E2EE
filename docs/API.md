@@ -255,18 +255,19 @@ Create a new chat (1:1 or group).
 
 ---
 
-### Get All Chats
+### Get Chats
 **Endpoint:** `GET /api/chats`
 
-Get all chats for a specific user. This endpoint returns only chats where the requested user is a member.
+Returns chats for the requested user. The backend forwards query parameters to the chat service.
 
 **Query Parameters:**
 - `user_id` (required): the ID of the user whose chats should be returned
 
 **Example:**
-`GET /api/chats?user_id=user_1`
-
-> Note: GET requests do not use a request body. The filter is passed as a query parameter.
+```http
+GET /api/chats?user_id=user_1
+Authorization: Bearer <token>
+```
 
 **Response:**
 ```json
@@ -283,7 +284,7 @@ Get all chats for a specific user. This endpoint returns only chats where the re
 
 ---
 
-### Get Specific Chat
+### Get Chat
 **Endpoint:** `GET /api/chats/{chat_id}`
 
 Get a specific chat by ID.
@@ -301,87 +302,7 @@ Get a specific chat by ID.
 
 ---
 
-## Message Service
-
-### Get Messages
-**Endpoint:** `GET /api/chats/{chat_id}/messages`
-
-Get messages for a chat. Each returned message now contains `is_read` for the authenticated user.
-
-**Query Parameters:**
-- `limit` (optional, default `50`)
-- `before` (optional ISO timestamp cursor, example: `2026-04-23T15:09:47.789130Z`)
-
-**Response:**
-```json
-[
-  {
-    "id": "msg_f5349dcf",
-    "chat_id": "chat_4c0edcbd",
-    "sender_id": "user_10",
-    "ciphertext": "test-ciphertext",
-    "message_type": "text",
-    "created_at": "2026-04-23T15:09:47.789130Z",
-    "is_read": true
-  }
-]
-```
-
----
-
-### Get Single Message
-**Endpoint:** `GET /api/messages/{message_id}`
-
-Returns one message including `is_read` for the authenticated user.
-
-**Response:**
-```json
-{
-  "id": "msg_f5349dcf",
-  "chat_id": "chat_4c0edcbd",
-  "sender_id": "user_10",
-  "ciphertext": "test-ciphertext",
-  "message_type": "text",
-  "created_at": "2026-04-23T15:09:47.789130Z",
-  "is_read": false
-}
-```
-
----
-
-### Mark Message As Read
-**Endpoint:** `POST /api/messages/{message_id}/read`
-
-Marks the message as read for the authenticated user.
-
-**Response:**
-```json
-{
-  "message_id": "msg_f5349dcf",
-  "user_id": "user_11",
-  "is_read": true
-}
-```
-
----
-
-### Get Read Status For Current User
-**Endpoint:** `GET /api/messages/{message_id}/read`
-
-Returns whether the authenticated user has read the message.
-
-**Response:**
-```json
-{
-  "message_id": "msg_f5349dcf",
-  "user_id": "user_11",
-  "is_read": true
-}
-```
-
----
-
-### Add Member to Chat
+### Add Member
 **Endpoint:** `POST /api/chats/{chat_id}/members`
 
 Add a member to a chat.
@@ -404,7 +325,7 @@ Add a member to a chat.
 
 ---
 
-### Remove Member from Chat
+### Remove Member
 **Endpoint:** `DELETE /api/chats/{chat_id}/members/{user_id}`
 
 Remove a member from a chat.
@@ -422,10 +343,12 @@ Remove a member from a chat.
 
 ## Message Service
 
+The current MVP stores messages, read receipts, and chat indexes in Redis. New messages are published to the Redis channel `chat_messages`, and the API Gateway fans them out to websocket clients in the matching chat room.
+
 ### Send Message
 **Endpoint:** `POST /api/chats/{chat_id}/messages`
 
-Send an encrypted message to a chat. The message content is encrypted on the client using the Signal protocol.
+Send an encrypted message to a chat. The backend stores ciphertext only.
 
 **Request Body:**
 ```json
@@ -445,7 +368,8 @@ Send an encrypted message to a chat. The message content is encrypted on the cli
   "sender_id": "user_1",
   "ciphertext": "encrypted_message_content",
   "message_type": "text",
-  "created_at": "2026-04-20T12:00:00Z"
+  "created_at": "2026-04-20T12:00:00Z",
+  "is_read": true
 }
 ```
 
@@ -457,8 +381,8 @@ Send an encrypted message to a chat. The message content is encrypted on the cli
 Get messages for a chat with pagination.
 
 **Query Parameters:**
-- `limit` (optional, default: 50)
-- `before` (optional, ISO-8601 UTC timestamp; returns messages older than this cursor)
+- `limit` (optional, default `50`)
+- `before` (optional ISO-8601 UTC timestamp cursor)
 
 **Response:**
 ```json
@@ -469,7 +393,8 @@ Get messages for a chat with pagination.
     "sender_id": "user_1",
     "ciphertext": "encrypted_message_content",
     "message_type": "text",
-    "created_at": "2026-04-20T12:00:00Z"
+    "created_at": "2026-04-20T12:00:00Z",
+    "is_read": false
   }
 ]
 ```
@@ -482,7 +407,7 @@ Authorization: Bearer <token>
 
 ---
 
-### Get Specific Message
+### Get Message
 **Endpoint:** `GET /api/messages/{message_id}`
 
 Get a specific message by ID.
@@ -495,7 +420,8 @@ Get a specific message by ID.
   "sender_id": "user_1",
   "ciphertext": "encrypted_message_content",
   "message_type": "text",
-  "created_at": "2026-04-20T12:00:00Z"
+  "created_at": "2026-04-20T12:00:00Z",
+  "is_read": false
 }
 ```
 
@@ -504,7 +430,7 @@ Get a specific message by ID.
 ### Delete Message
 **Endpoint:** `DELETE /api/messages/{message_id}`
 
-Delete a message.
+Delete a message sent by the authenticated user.
 
 **Response:**
 ```json
@@ -513,6 +439,75 @@ Delete a message.
   "message_id": "msg_xyz789"
 }
 ```
+
+---
+
+### Mark Message As Read
+**Endpoint:** `POST /api/messages/{message_id}/read`
+
+Marks the message as read for the authenticated user.
+
+**Response:**
+```json
+{
+  "message_id": "msg_f5349dcf",
+  "user_id": "user_11",
+  "is_read": true
+}
+```
+
+---
+
+### Get Read Status
+**Endpoint:** `GET /api/messages/{message_id}/read`
+
+Returns whether the authenticated user has read the message.
+
+**Response:**
+```json
+{
+  "message_id": "msg_f5349dcf",
+  "user_id": "user_11",
+  "is_read": true
+}
+```
+
+---
+
+## Realtime WebSocket Push
+
+### Chat Stream
+**Endpoint:** `WS /ws/chats/{chat_id}`
+
+Use this websocket to receive realtime message delivery for a chat. The gateway validates the JWT and checks that the connected user is a chat member before upgrading the connection.
+
+**Authentication:**
+- `?token=<jwt>` query parameter, or
+- `Authorization: Bearer <jwt>` header
+
+**Initial server event:**
+```json
+{
+  "type": "connected",
+  "chat_id": "chat_abc123",
+  "user_id": "user_1"
+}
+```
+
+**Incoming message event:**
+```json
+{
+  "type": "message.new",
+  "id": "msg_xyz789",
+  "chat_id": "chat_abc123",
+  "sender_id": "user_1",
+  "ciphertext": "encrypted_message_content",
+  "message_type": "text",
+  "created_at": "2026-04-20T12:00:00Z"
+}
+```
+
+The socket stays open after the initial connect message. Clients can keep it alive with periodic traffic if needed.
 
 ---
 
@@ -656,10 +651,13 @@ Point the following records to your server's IP:
 
 ## Notes
 
-- All endpoints (except `/health` and `/api/auth/register`) require authentication via JWT token.
-- Messages are encrypted on the client using the Signal protocol — the backend only stores and relays ciphertext.
+- JWT is required for chat, message, friend, and Signal key-bundle endpoints.
+- Public endpoints in the current backend are `/health`, `/api/auth/register`, `/api/auth/login`, `/api/users/{user_id}/public-key`, `/api/users/{user_id}/bundle`, and the media endpoints.
+- Realtime message delivery is exposed through `/ws/chats/{chat_id}` and requires the same JWT as the HTTP routes.
+- Messages are encrypted on the client using the Signal protocol; the backend stores and relays ciphertext only.
+- Chat and message state are currently backed by Redis. The MongoDB container remains in the compose stack for future expansion, but it is not the current message store.
 - Media files are stored in MinIO (S3-compatible storage).
-- The API Gateway proxies all requests to the appropriate microservices.
+- The API Gateway proxies all HTTP requests to the appropriate microservices.
 
 ---
 
@@ -671,7 +669,7 @@ For production with HTTPS:
    ```bash
    # Install certbot
    sudo apt install certbot python3-certbot-nginx
-   
+
    # Generate certificate
    sudo certbot --nginx -d secra.top -d www.secra.top
    ```
@@ -698,6 +696,7 @@ curl -X POST https://secra.top/api/auth/login \
 ```bash
 curl -X POST https://secra.top/api/chats \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
   -d '{"member_ids": ["user_1", "user_2"], "is_group": false}'
 ```
 
@@ -705,5 +704,6 @@ curl -X POST https://secra.top/api/chats \
 ```bash
 curl -X POST https://secra.top/api/chats/chat_abc123/messages \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
   -d '{"chat_id": "chat_abc123", "sender_id": "user_1", "ciphertext": "encrypted...", "message_type": "text"}'
 ```

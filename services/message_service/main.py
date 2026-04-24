@@ -22,6 +22,7 @@ CHAT_SERVICE_URL = os.getenv("CHAT_SERVICE_URL", "http://chat_service:8002")
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+MESSAGE_EVENTS_CHANNEL = os.getenv("MESSAGE_EVENTS_CHANNEL", "chat_messages")
 
 
 def get_redis_conn():
@@ -200,6 +201,7 @@ def send_message(chat_id: str, message: MessageCreate, authorization: str = Head
         pipe.zadd(_chat_messages_key(chat_id), {message_id: score})
         pipe.sadd(_message_reads_key(message_id), message.sender_id)
         pipe.execute()
+        client.publish(MESSAGE_EVENTS_CHANNEL, json.dumps({"type": "message.new", **message_payload}))
     except RedisError:
         raise HTTPException(status_code=503, detail="Redis unavailable")
 

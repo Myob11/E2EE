@@ -29,16 +29,18 @@ flowchart TD
 		B --> D[Chat service]
 		B --> E[Message service]
 		B --> F[Media service]
+        B --> G[Realtime WebSocket<br/>/ws/chats/{chat_id}]
 
 		C --> CDB[(SQL DB<br/>Users)]
 		D --> DDB[(Redis / NoSQL<br/>Active chats)]
-		E --> EDB[(MongoDB<br/>Messages)]
+        E --> EDB[(Redis / NoSQL<br/>Messages + read state)]
 		F --> FDB[(S3 Storage<br/>MinIO)]
 
 		C --> OBS[Logging & Monitoring<br/>Grafana / ELK]
 		D --> OBS
 		E --> OBS
 		F --> OBS
+        G --> A
 ```
 
 ## 3. Signal encryption workflow diagram
@@ -50,6 +52,7 @@ The diagram shows:
 - recipient bundle retrieval
 - local encryption before sending
 - storage of ciphertext in the message service
+- realtime fan-out through the gateway websocket
 - local decryption after retrieval
 
 ```mermaid
@@ -59,7 +62,7 @@ sequenceDiagram
     participant Auth as Auth Service
     participant Message as Message Service
     participant PG as PostgreSQL
-    participant Mongo as MongoDB
+    participant Redis as Redis
 
     Client->>Gateway: POST /api/auth/register
     Gateway->>Auth: POST /register
@@ -122,15 +125,16 @@ sequenceDiagram
     Client->>Gateway: POST /api/chats/{chat_id}/messages
     Note right of Client: send ciphertext only
     Gateway->>Message: POST /chats/{chat_id}/messages
-    Message->>Mongo: INSERT ciphertext
-    Mongo-->>Message: stored
+    Message->>Redis: STORE ciphertext + indexes
+    Redis-->>Message: stored
     Message-->>Gateway: message saved
+    Note right of Gateway: publish message.new to websocket clients in the chat
     Gateway-->>Client: message response
 
     Client->>Gateway: GET /api/chats/{chat_id}/messages
     Gateway->>Message: GET /chats/{chat_id}/messages
-    Message->>Mongo: SELECT messages
-    Mongo-->>Message: ciphertext list
+    Message->>Redis: SELECT messages
+    Redis-->>Message: ciphertext list
     Message-->>Gateway: ciphertext list
     Gateway-->>Client: encrypted messages
     Note right of Client: decrypt ciphertext locally with session
@@ -144,7 +148,7 @@ You can export the diagram with Mermaid tools:
 ## 4. Mikrostoritve in odgovornosti
 
 ### 3.1 Auth service
-- Registracija, prijava, osvezevanje tokenov.
+- Registracija, prijava in JWT avtentikacija.
 - Upravljanje uporabniskih profilov in javnih kljucev.
 - Iskanje uporabnikov in upravljanje prijateljev.
 - Signal key bundle endpointi (identity key, signed prekey, one-time prekeys).
@@ -158,7 +162,7 @@ You can export the diagram with Mermaid tools:
 ### 3.3 Message service
 - Sprejem in dostava sifriranih sporocil (ciphertext + metadata).
 - Zgodovina sporocil in paginacija.
-- MongoDB za shranjevanje sporocil.
+- Redis za shranjevanje sporocil, indeksov in read state.
 
 ### 3.4 Media service
 - Upload/download medijskih datotek preko S3 API.
@@ -168,6 +172,7 @@ You can export the diagram with Mermaid tools:
 ### 3.5 API Gateway (NGINX)
 - Enotna vstopna tocka za kliente.
 - Reverse proxy do posameznih storitev.
+- WebSocket push za realtime dostavo sporocil.
 - Rate limiting, CORS, osnovni security headers.
 
 ### 3.6 CDN in DNS (Cloudflare)
@@ -186,7 +191,7 @@ Za prakticno testiranje endpointov uporabi:
 ## 5. Podatkovni sloj
 
 - Relacijska baza: uporabniki, auth podatki, osnovni profil.
-- Nerelacijska baza: sporocila (MongoDB) + aktivni chati/caching (Redis).
+- Nerelacijska baza: sporocila in aktivni chati/read state (Redis).
 - S3 objektna shramba: slike, video, dokumenti (MinIO).
 
 ## 6. Mejniki projekta
@@ -203,7 +208,7 @@ Za prakticno testiranje endpointov uporabi:
 - Git repozitorij: da.
 - Frontend + backend: da (Android frontend + backend mikrostoritve).
 - Mikrostoritve + Docker Compose: da.
-- 1 relacijska + 1 nerelacijska baza: da (SQL + MongoDB/Redis).
+- 1 relacijska + 1 nerelacijska baza: da (SQL + Redis).
 - API gateway/proxy: da (NGINX).
 - Centralizirano logiranje: da (ELK/Grafana stack).
 - CI/CD pipeline: da (GitHub Actions).
@@ -241,7 +246,7 @@ zagon preko Docker Compose z naslednjimi storitvami:
 - message-service
 - media-service
 - postgres ali mysql
-- mongodb
+- mongodb (trenutno rezerviran za nadaljnji razvoj)
 - redis
 - minio
 - log stack (npr. elk ali prometheus+loki+grafana)
@@ -258,9 +263,10 @@ Primer pipeline korakov (GitHub Actions):
 ## 11. Varnost in E2EE opombe
 
 - Kljuce in sifriranje upravlja odjemalec (Android app).
-- Backend hrani samo ciphertext in metadata sporocil.
+- Backend hrani samo ciphertext, metadata sporocil in read state.
+- Realtime dostava gre prek websocket povezave na API gatewayu.
 - Prenos podatkov je zasciten s TLS.
-- JWT + refresh token flow za avtentikacijo.
+- JWT flow za avtentikacijo.
 
 ## 12. Ekipa
 

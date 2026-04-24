@@ -1,8 +1,15 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, Depends, Header
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 import os
+import asyncio
+import base64
+import hashlib
+import hmac
+import json
+from datetime import datetime, timezone
+import redis.asyncio as redis_async
 
 app = FastAPI()
 
@@ -21,6 +28,83 @@ CHAT_SERVICE_URL = os.getenv("CHAT_SERVICE_URL", "http://chat_service:8002")
 MESSAGE_SERVICE_URL = os.getenv("MESSAGE_SERVICE_URL", "http://message_service:8003")
 MEDIA_SERVICE_URL = os.getenv("MEDIA_SERVICE_URL", "http://media_service:8004")
 DOMAIN = os.getenv("DOMAIN", "secra.top")
+REDIS_HOST = os.getenv("REDIS_HOST", "redis")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+
+MESSAGE_EVENTS_CHANNEL = "chat_messages"
+
+
+def _base64url_decode(data: str) -> bytes:
+    padding = "=" * (-len(data) % 4)
+    return base64.urlsafe_b64decode(data + padding)
+
+
+def parse_bearer_token(authorization: str | None) -> str:
+    if authorization is None or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+
+    token = authorization.split(" ", 1)[1]
+    try:
+        header_b64, payload_b64, signature_b64 = token.split(".")
+        signing_input = f"{header_b64}.{payload_b64}".encode()
+        expected_signature = hmac.new(
+            SECRET_KEY.encode(),
+            signing_input,
+            hashlib.sha256,
+        ).digest()
+        if not hmac.compare_digest(_base64url_decode(signature_b64), expected_signature):
+            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+
+        payload = json.loads(_base64url_decode(payload_b64).decode())
+        exp = payload.get("exp")
+        if exp is not None and datetime.now(timezone.utc).timestamp() > float(exp):
+            raise HTTPException(status_code=401, detail="Token expired")
+
+        subject = payload.get("sub")
+        if not subject:
+            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+        return subject
+    except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+
+
+class ConnectionManager:
+    def __init__(self):
+        self._connections: dict[str, list[WebSocket]] = {}
+        self._lock = asyncio.Lock()
+
+    async def connect(self, chat_id: str, websocket: WebSocket):
+        await websocket.accept()
+        async with self._lock:
+            self._connections.setdefault(chat_id, []).append(websocket)
+
+    async def disconnect(self, chat_id: str, websocket: WebSocket):
+        async with self._lock:
+            sockets = self._connections.get(chat_id, [])
+            if websocket in sockets:
+                sockets.remove(websocket)
+            if not sockets and chat_id in self._connections:
+                self._connections.pop(chat_id, None)
+
+    async def broadcast(self, chat_id: str, payload: dict):
+        async with self._lock:
+            sockets = list(self._connections.get(chat_id, []))
+
+        dead_sockets = []
+        for socket in sockets:
+            try:
+                await socket.send_json(payload)
+            except Exception:
+                dead_sockets.append(socket)
+
+        for socket in dead_sockets:
+            await self.disconnect(chat_id, socket)
+
+
+connection_manager = ConnectionManager()
+redis_client: redis_async.Redis | None = None
+redis_listener_task: asyncio.Task | None = None
 
 
 def forward_headers(request: Request):
@@ -46,6 +130,71 @@ def build_proxy_response(response):
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "api_gateway", "domain": DOMAIN}
+
+
+async def get_chat_via_gateway(chat_id: str, authorization: str):
+    headers = {"Authorization": authorization}
+    async with httpx.AsyncClient() as client:
+        response = await client.get(f"{CHAT_SERVICE_URL}/chats/{chat_id}", headers=headers)
+        if response.status_code >= 400:
+            try:
+                detail = response.json().get("detail", "Unable to fetch chat")
+            except ValueError:
+                detail = response.text or "Unable to fetch chat"
+            raise HTTPException(status_code=response.status_code, detail=detail)
+        return response.json()
+
+
+async def redis_message_listener():
+    global redis_client
+    while True:
+        try:
+            if redis_client is None:
+                redis_client = redis_async.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+
+            pubsub = redis_client.pubsub()
+            await pubsub.subscribe(MESSAGE_EVENTS_CHANNEL)
+            async for event in pubsub.listen():
+                if event.get("type") != "message":
+                    continue
+
+                raw_payload = event.get("data")
+                if not raw_payload:
+                    continue
+
+                try:
+                    payload = json.loads(raw_payload)
+                except json.JSONDecodeError:
+                    continue
+
+                chat_id = payload.get("chat_id")
+                if chat_id:
+                    await connection_manager.broadcast(chat_id, payload)
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            await asyncio.sleep(2)
+
+
+@app.on_event("startup")
+async def on_startup():
+    global redis_listener_task
+    redis_listener_task = asyncio.create_task(redis_message_listener())
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    global redis_listener_task, redis_client
+    if redis_listener_task:
+        redis_listener_task.cancel()
+        try:
+            await redis_listener_task
+        except Exception:
+            pass
+        redis_listener_task = None
+    if redis_client:
+        await redis_client.close()
+        redis_client = None
 
 
 # =====================
@@ -350,3 +499,38 @@ async def proxy_get_media_metadata(media_id: str, request: Request):
             return build_proxy_response(response)
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Media service unavailable: {str(e)}")
+
+
+@app.websocket("/ws/chats/{chat_id}")
+async def websocket_chat(chat_id: str, websocket: WebSocket):
+    token = websocket.query_params.get("token")
+    if not token:
+        auth_header = websocket.headers.get("authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ", 1)[1]
+
+    if not token:
+        await websocket.close(code=4401)
+        return
+
+    authorization = f"Bearer {token}"
+    try:
+        current_user_id = parse_bearer_token(authorization)
+        chat = await get_chat_via_gateway(chat_id, authorization)
+        if current_user_id not in chat.get("member_ids", []):
+            await websocket.close(code=4403)
+            return
+    except HTTPException:
+        await websocket.close(code=4401)
+        return
+
+    await connection_manager.connect(chat_id, websocket)
+    try:
+        await websocket.send_json({"type": "connected", "chat_id": chat_id, "user_id": current_user_id})
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        await connection_manager.disconnect(chat_id, websocket)
+    except Exception:
+        await connection_manager.disconnect(chat_id, websocket)
+        await websocket.close(code=1011)
