@@ -78,7 +78,14 @@ class KeyBundleResponse(BaseModel):
 
 
 def get_db_conn():
-    return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+    except psycopg2.OperationalError as exc:
+        error_text = str(exc).lower()
+        if "does not exist" in error_text or "could not connect to server" in error_text:
+            wait_for_db()
+            return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+        raise
 
 
 def get_admin_db_url():
