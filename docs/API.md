@@ -233,6 +233,10 @@ One one-time prekey is consumed on each request.
 
 Create a new chat (1:1 or group).
 
+For individual chats (`is_group=false`), the backend enforces uniqueness by member pair:
+- exactly 2 members are required
+- if a chat for the same two members already exists, that existing chat is returned instead of creating a duplicate
+
 **Request Body:**
 ```json
 {

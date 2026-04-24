@@ -46,6 +46,34 @@ def _get_chat_or_404(client: redis.Redis, chat_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Chat not found")
     return json.loads(payload)
 
+
+def _find_existing_individual_chat(client: redis.Redis, member_ids: List[str]) -> Optional[dict]:
+    if len(member_ids) != 2:
+        return None
+
+    requested_members = set(member_ids)
+    try:
+        candidate_chat_ids = client.smembers(_user_chats_key(member_ids[0]))
+        for chat_id in candidate_chat_ids:
+            payload = client.get(_chat_key(chat_id))
+            if not payload:
+                continue
+
+            chat = json.loads(payload)
+            if chat.get("is_group"):
+                continue
+
+            chat_members = chat.get("member_ids", [])
+            if len(chat_members) != 2:
+                continue
+
+            if set(chat_members) == requested_members:
+                return chat
+    except RedisError:
+        raise HTTPException(status_code=503, detail="Redis unavailable")
+
+    return None
+
 # Pydantic models
 class ChatCreate(BaseModel):
     name: Optional[str] = None
@@ -108,6 +136,14 @@ def create_chat(chat: ChatCreate, current_user_id: str = Depends(parse_bearer_to
     unique_member_ids = list(dict.fromkeys(chat.member_ids))
     if current_user_id not in unique_member_ids:
         unique_member_ids = [current_user_id, *unique_member_ids]
+
+    if not chat.is_group:
+        if len(unique_member_ids) != 2:
+            raise HTTPException(status_code=400, detail="Individual chat must have exactly 2 members")
+
+        existing_chat = _find_existing_individual_chat(client, unique_member_ids)
+        if existing_chat:
+            return ChatResponse(**existing_chat)
 
     chat_id = f"chat_{uuid.uuid4().hex[:8]}"
 
