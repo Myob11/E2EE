@@ -515,12 +515,216 @@ The socket stays open after the initial connect message. Clients can keep it ali
 
 ---
 
-## Media Service
+## Media Service (MinIO S3 Profile Pictures)
 
-### Get Upload URL
+The media service provides profile picture management using MinIO S3 storage for persistent, scalable file storage with pre-signed URLs for secure access.
+
+### MinIO S3 Configuration
+
+**Current Setup:**
+- **Endpoint**: External MinIO at `212.235.185.13:9000`
+- **Bucket**: `profiles` (contains all profile pictures)
+- **Key Format**: `profiles/{username}/picture`
+- **Access**: Public URLs via pre-signed URLs (1-hour expiration)
+- **Supported Formats**: JPEG, PNG, WebP, GIF
+
+**Environment Variables:**
+```yaml
+MINIO_ENDPOINT=212.235.185.13:9000
+MINIO_ACCESS_KEY=user-01
+MINIO_SECRET_KEY=thestrongestvajePass01
+MINIO_BUCKET=profiles
+MINIO_SECURE=false
+DOMAIN=secra.top
+```
+
+---
+
+### 1. Get Profile Picture Upload URL
+**Endpoint:** `POST /api/profiles/{username}/picture`
+
+Get a pre-signed S3 URL for uploading a profile picture.
+
+**Parameters:**
+- `username` (path): Username for the profile picture
+- `content_type` (query, optional): Image MIME type. Default: `image/jpeg`
+  - Supported: `image/jpeg`, `image/png`, `image/webp`, `image/gif`
+
+**Response:**
+```json
+{
+  "username": "john_doe",
+  "key": "profiles/john_doe/picture",
+  "upload_url": "http://212.235.185.13:9000/profiles/profiles/john_doe/picture?...",
+  "expires_at": "2026-05-04T15:30:00Z"
+}
+```
+
+**cURL Example:**
+```bash
+curl -X POST 'http://localhost:8004/profiles/john_doe/picture?content_type=image/jpeg'
+```
+
+**JavaScript Example:**
+```javascript
+const response = await fetch(
+  'http://localhost:8004/profiles/john_doe/picture?content_type=image/jpeg',
+  { method: 'POST' }
+);
+const { upload_url } = await response.json();
+```
+
+---
+
+### 2. Upload File to MinIO
+
+After receiving the upload URL, upload the file directly to MinIO using a PUT request:
+
+**cURL Example:**
+```bash
+curl -X PUT 'https://212.235.185.13:9000/...'   -H 'Content-Type: image/jpeg'   --data-binary @/path/to/profile.jpg
+```
+
+**JavaScript Example:**
+```javascript
+const file = document.getElementById('imageInput').files[0];
+await fetch(upload_url, {
+  method: 'PUT',
+  body: file,
+  headers: { 'Content-Type': 'image/jpeg' }
+});
+```
+
+---
+
+### 3. Mark Profile Picture Upload as Complete
+**Endpoint:** `POST /api/profiles/{username}/picture/complete`
+
+Mark a profile picture upload as complete and store its size.
+
+**Parameters:**
+- `username` (path): Username
+- `size` (body, number): File size in bytes
+
+**Request Body:**
+```json
+{
+  "size": 125432
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Profile picture upload complete",
+  "username": "john_doe",
+  "size": 125432
+}
+```
+
+**cURL Example:**
+```bash
+curl -X POST 'http://localhost:8004/profiles/john_doe/picture/complete'   -H 'Content-Type: application/json'   -d '{"size": 125432}'
+```
+
+---
+
+### 4. Get Profile Picture Download URL
+**Endpoint:** `GET /api/profiles/{username}/picture`
+
+Get a pre-signed S3 URL for downloading a profile picture.
+
+**Parameters:**
+- `username` (path): Username for the profile picture
+
+**Response:**
+```json
+{
+  "username": "john_doe",
+  "key": "profiles/john_doe/picture",
+  "download_url": "http://212.235.185.13:9000/profiles/profiles/john_doe/picture?...",
+  "expires_at": "2026-05-04T15:30:00Z",
+  "content_type": "image/jpeg"
+}
+```
+
+**cURL Example:**
+```bash
+curl 'http://localhost:8004/profiles/john_doe/picture'
+```
+
+**JavaScript Example:**
+```javascript
+const response = await fetch('http://localhost:8004/profiles/john_doe/picture');
+const { download_url } = await response.json();
+const img = document.getElementById('profilePic');
+img.src = download_url;
+```
+
+---
+
+### 5. Get Profile Picture Metadata
+**Endpoint:** `GET /api/profiles/{username}/picture/metadata`
+
+Get metadata about a profile picture.
+
+**Parameters:**
+- `username` (path): Username for the profile picture
+
+**Response:**
+```json
+{
+  "username": "john_doe",
+  "key": "profiles/john_doe/picture",
+  "content_type": "image/jpeg",
+  "size": 125432,
+  "uploaded_at": "2026-05-04T14:30:00Z"
+}
+```
+
+**cURL Example:**
+```bash
+curl 'http://localhost:8004/profiles/john_doe/picture/metadata'
+```
+
+---
+
+### Complete Profile Picture Upload Flow
+
+1. **Get Upload URL**: `POST /api/profiles/{username}/picture?content_type=image/jpeg`
+2. **Upload File**: PUT to the returned `upload_url`
+3. **Mark Complete**: `POST /api/profiles/{username}/picture/complete` with file size
+4. **Download Picture**: `GET /api/profiles/{username}/picture` to get download URL
+5. **View Metadata**: `GET /api/profiles/{username}/picture/metadata` for details
+
+---
+
+### Error Responses
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | Invalid username | Username is empty or invalid |
+| 400 | Invalid image content type | File type is not supported |
+| 404 | Profile picture not found | No picture exists for this username |
+| 500 | Server error | MinIO connection failed (will still work locally) |
+
+---
+
+### Fallback Behavior
+
+When MinIO is unavailable, the API returns fallback URLs in the format:
+```
+http://profiles.secra.top/{username}/picture
+```
+
+This allows the API to respond gracefully even if the S3 service is down.
+
+---
+
+### Legacy Media Upload Endpoints
+
+#### Get Media Upload URL
 **Endpoint:** `POST /api/media/upload-url`
-
-Get a pre-signed URL for uploading media files.
 
 **Request Body:**
 ```json
@@ -531,85 +735,8 @@ Get a pre-signed URL for uploading media files.
 }
 ```
 
-**Response:**
-```json
-{
-  "upload_id": "media_abc123",
-  "upload_url": "http://minio:9000/media/media_abc123?signature=...",
-  "expires_at": "2026-04-20T13:00:00Z"
-}
-```
-
-### Profile Picture Upload URL
-**Endpoint:** `POST /api/profiles/{username}/picture`
-
-Get a pre-signed URL for uploading a user profile picture into MinIO.
-
-**Query Parameters:**
-- `content_type` (optional): `image/jpeg`, `image/png`, `image/webp`, or `image/gif`
-
-**Response:**
-```json
-{
-  "username": "john_doe",
-  "key": "profiles/john_doe/picture",
-  "upload_url": "http://212.235.185.13:9000/profiles/profiles/john_doe/picture?AWSAccessKeyId=...",
-  "expires_at": "2026-05-04T10:24:07Z"
-}
-```
-
-### Profile Picture Complete
-**Endpoint:** `POST /api/profiles/{username}/picture/complete`
-
-Mark a profile picture upload as complete.
-
-**Request Body:**
-```json
-{
-  "size": 125432
-}
-```
-
-### Profile Picture Download URL
-**Endpoint:** `GET /api/profiles/{username}/picture`
-
-Get a pre-signed URL for displaying the profile picture in the app.
-
-**Response:**
-```json
-{
-  "username": "john_doe",
-  "key": "profiles/john_doe/picture",
-  "download_url": "http://212.235.185.13:9000/profiles/profiles/john_doe/picture?AWSAccessKeyId=...",
-  "expires_at": "2026-05-04T10:24:23Z",
-  "content_type": "image/jpeg"
-}
-```
-
-### Profile Picture Metadata
-**Endpoint:** `GET /api/profiles/{username}/picture/metadata`
-
-Get stored metadata for the profile picture.
-
-**Response:**
-```json
-{
-  "username": "john_doe",
-  "key": "profiles/john_doe/picture",
-  "content_type": "image/jpeg",
-  "size": 125432,
-  "uploaded_at": "2026-05-04T09:24:07Z"
-}
-```
-
-For frontend implementation details and request flow, see [PROFILE_PICTURE_API.md](./PROFILE_PICTURE_API.md).
-
----
-
-### Complete Upload
+#### Mark Media Upload Complete
 **Endpoint:** `POST /api/media/complete`
-
-Mark media upload as complete.
 
 **Request Body:**
 ```json
@@ -619,48 +746,11 @@ Mark media upload as complete.
 }
 ```
 
-**Response:**
-```json
-{
-  "message": "Upload complete",
-  "media_id": "media_abc123"
-}
-```
-
----
-
-### Get Download URL
+#### Get Media Download URL
 **Endpoint:** `GET /api/media/{media_id}/download-url`
 
-Get a pre-signed URL for downloading media.
-
-**Response:**
-```json
-{
-  "media_id": "media_abc123",
-  "download_url": "http://minio:9000/media/media_abc123?signature=...",
-  "expires_at": "2026-04-20T13:00:00Z"
-}
-```
-
----
-
-### Get Media Metadata
+#### Get Media Metadata
 **Endpoint:** `GET /api/media/{media_id}`
-
-Get media file metadata.
-
-**Response:**
-```json
-{
-  "id": "media_abc123",
-  "filename": "image.jpg",
-  "content_type": "image/jpeg",
-  "size": 1024000,
-  "uploaded_by": "user_1",
-  "created_at": "2026-04-20T12:00:00Z"
-}
-```
 
 ---
 
