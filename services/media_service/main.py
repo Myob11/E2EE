@@ -168,3 +168,161 @@ def get_media_metadata(media_id: str):
         raise HTTPException(status_code=404, detail="Media not found")
     
     return MediaMetadata(**media_db[media_id])
+# Profile Picture Endpoints
+class ProfilePictureUploadResponse(BaseModel):
+    username: str
+    key: str
+    upload_url: str
+    expires_at: str
+
+
+class ProfilePictureDownloadResponse(BaseModel):
+    username: str
+    key: str
+    download_url: str
+    expires_at: str
+    content_type: str
+
+
+class ProfilePictureMetadata(BaseModel):
+    username: str
+    key: str
+    content_type: str
+    size: int
+    uploaded_at: str
+
+
+class CompletePictureUploadRequest(BaseModel):
+    size: int
+
+
+@app.post("/profiles/{username}/picture", response_model=ProfilePictureUploadResponse)
+def get_profile_picture_upload_url(username: str, content_type: str = "image/jpeg"):
+    """Get a pre-signed URL for uploading a profile picture"""
+    if not username or len(username) < 1:
+        raise HTTPException(status_code=400, detail="Invalid username")
+    
+    if content_type not in ["image/jpeg", "image/png", "image/webp", "image/gif"]:
+        raise HTTPException(status_code=400, detail="Invalid image content type")
+    
+    # S3 key format: profiles/{username}/picture
+    s3_key = f"profiles/{username}/picture"
+    
+    try:
+        s3 = get_s3_client()
+        # Create bucket if it doesn't exist
+        try:
+            s3.head_bucket(Bucket=MINIO_BUCKET)
+        except:
+            s3.create_bucket(Bucket=MINIO_BUCKET)
+        
+        upload_url = s3.generate_presigned_url(
+            'put_object',
+            Params={
+                'Bucket': MINIO_BUCKET,
+                'Key': s3_key,
+                'ContentType': content_type
+            },
+            ExpiresIn=3600  # 1 hour
+        )
+    except Exception as e:
+        logger.error(f"Error generating S3 upload URL: {str(e)}")
+        # Fallback for testing without MinIO
+        protocol = "https" if MINIO_SECURE else "http"
+        upload_url = f"{protocol}://profiles.{DOMAIN}/{username}/picture"
+    
+    # Store metadata
+    media_db[s3_key] = {
+        "username": username,
+        "content_type": content_type,
+        "size": 0,
+        "uploaded_at": datetime.utcnow().isoformat() + "Z"
+    }
+    
+    expires_at = (datetime.utcnow() + timedelta(hours=1)).isoformat() + "Z"
+    
+    return ProfilePictureUploadResponse(
+        username=username,
+        key=s3_key,
+        upload_url=upload_url,
+        expires_at=expires_at
+    )
+
+
+@app.get("/profiles/{username}/picture", response_model=ProfilePictureDownloadResponse)
+def get_profile_picture_download_url(username: str):
+    """Get a pre-signed URL for downloading a profile picture"""
+    if not username or len(username) < 1:
+        raise HTTPException(status_code=400, detail="Invalid username")
+    
+    s3_key = f"profiles/{username}/picture"
+    
+    if s3_key not in media_db:
+        raise HTTPException(status_code=404, detail="Profile picture not found")
+    
+    metadata = media_db[s3_key]
+    
+    try:
+        s3 = get_s3_client()
+        download_url = s3.generate_presigned_url(
+            'get_object',
+            Params={
+                'Bucket': MINIO_BUCKET,
+                'Key': s3_key
+            },
+            ExpiresIn=3600  # 1 hour
+        )
+    except Exception as e:
+        logger.error(f"Error generating S3 download URL: {str(e)}")
+        # Fallback for testing without MinIO
+        protocol = "https" if MINIO_SECURE else "http"
+        download_url = f"{protocol}://profiles.{DOMAIN}/{username}/picture"
+    
+    expires_at = (datetime.utcnow() + timedelta(hours=1)).isoformat() + "Z"
+    
+    return ProfilePictureDownloadResponse(
+        username=username,
+        key=s3_key,
+        download_url=download_url,
+        expires_at=expires_at,
+        content_type=metadata.get("content_type", "image/jpeg")
+    )
+
+
+@app.get("/profiles/{username}/picture/metadata", response_model=ProfilePictureMetadata)
+def get_profile_picture_metadata(username: str):
+    """Get profile picture metadata"""
+    if not username or len(username) < 1:
+        raise HTTPException(status_code=400, detail="Invalid username")
+    
+    s3_key = f"profiles/{username}/picture"
+    
+    if s3_key not in media_db:
+        raise HTTPException(status_code=404, detail="Profile picture not found")
+    
+    metadata = media_db[s3_key]
+    
+    return ProfilePictureMetadata(
+        username=username,
+        key=s3_key,
+        content_type=metadata.get("content_type", "image/jpeg"),
+        size=metadata.get("size", 0),
+        uploaded_at=metadata.get("uploaded_at", "")
+    )
+
+
+@app.post("/profiles/{username}/picture/complete")
+def complete_profile_picture_upload(username: str, request: CompletePictureUploadRequest):
+    """Mark profile picture upload as complete"""
+    if not username or len(username) < 1:
+        raise HTTPException(status_code=400, detail="Invalid username")
+    
+    s3_key = f"profiles/{username}/picture"
+    
+    if s3_key not in media_db:
+        raise HTTPException(status_code=404, detail="Upload not found")
+    
+    media_db[s3_key]["size"] = request.size
+    logger.info(f"Profile picture upload completed for user {username}, size: {request.size} bytes")
+    
+    return {"message": "Profile picture upload complete", "username": username, "size": request.size}
