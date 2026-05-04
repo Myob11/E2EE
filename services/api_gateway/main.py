@@ -1,5 +1,5 @@
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, Depends, Header
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 import os
@@ -8,10 +8,19 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
+import time
 from datetime import datetime, timezone
 import redis.asyncio as redis_async
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
 app = FastAPI()
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logger = logging.getLogger("api_gateway")
 
 # CORS settings for Android app
 app.add_middleware(
@@ -33,6 +42,50 @@ REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
 
 MESSAGE_EVENTS_CHANNEL = "chat_messages"
+
+REQUEST_COUNT = Counter(
+    "api_gateway_requests_total",
+    "Total HTTP requests handled by the API gateway",
+    ["method", "path", "status"],
+)
+REQUEST_LATENCY = Histogram(
+    "api_gateway_request_duration_seconds",
+    "HTTP request duration in seconds",
+    ["method", "path"],
+)
+WEBSOCKET_CONNECTIONS = Counter(
+    "api_gateway_websocket_connections_total",
+    "Total websocket connections accepted by the API gateway",
+    ["chat_id"],
+)
+
+
+def route_path(request: Request) -> str:
+    route = request.scope.get("route")
+    return getattr(route, "path", request.url.path)
+
+
+@app.middleware("http")
+async def metrics_middleware(request: Request, call_next):
+    start = time.perf_counter()
+    response = None
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        duration = time.perf_counter() - start
+        path = route_path(request)
+        status = getattr(response, "status_code", 500)
+        REQUEST_COUNT.labels(request.method, path, str(status)).inc()
+        REQUEST_LATENCY.labels(request.method, path).observe(duration)
+        logger.info(
+            "request method=%s path=%s status=%s duration_ms=%.2f client=%s",
+            request.method,
+            path,
+            status,
+            duration * 1000.0,
+            request.client.host if request.client else "unknown",
+        )
 
 
 def _base64url_decode(data: str) -> bytes:
@@ -78,6 +131,7 @@ class ConnectionManager:
         await websocket.accept()
         async with self._lock:
             self._connections.setdefault(chat_id, []).append(websocket)
+        WEBSOCKET_CONNECTIONS.labels(chat_id).inc()
 
     async def disconnect(self, chat_id: str, websocket: WebSocket):
         async with self._lock:
@@ -130,6 +184,11 @@ def build_proxy_response(response):
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "api_gateway", "domain": DOMAIN}
+
+
+@app.get("/metrics")
+def metrics():
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 async def get_chat_via_gateway(chat_id: str, authorization: str):

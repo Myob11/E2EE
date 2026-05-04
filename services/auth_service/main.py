@@ -11,13 +11,39 @@ import psycopg2.extras
 from psycopg2 import sql
 from urllib.parse import urlparse, urlunparse
 import os
+import logging
+import time
 
 app = FastAPI()
 
-# Database connection (will be set via environment variables)
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logger = logging.getLogger("auth_service")
+
+
+@app.middleware("http")
+async def request_logging_middleware(request, call_next):
+    start = time.perf_counter()
+    response = None
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        status = getattr(response, "status_code", 500)
+        duration_ms = (time.perf_counter() - start) * 1000.0
+        logger.info(
+            "request method=%s path=%s status=%s duration_ms=%.2f client=%s",
+            request.method,
+            request.url.path,
+            status,
+            duration_ms,
+            request.client.host if request.client else "unknown",
+        )
+
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@postgres:5432/auth_db")
 
-# JWT settings
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
@@ -78,14 +104,7 @@ class KeyBundleResponse(BaseModel):
 
 
 def get_db_conn():
-    try:
-        return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
-    except psycopg2.OperationalError as exc:
-        error_text = str(exc).lower()
-        if "does not exist" in error_text or "could not connect to server" in error_text:
-            wait_for_db()
-            return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
-        raise
+    return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
 
 
 def get_admin_db_url():

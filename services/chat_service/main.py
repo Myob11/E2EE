@@ -7,13 +7,40 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
+import time
 from datetime import datetime, timezone
 import redis
 from redis.exceptions import RedisError
 
 app = FastAPI()
 
-# Redis connection (will be set via environment variables)
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logger = logging.getLogger("chat_service")
+
+
+@app.middleware("http")
+async def request_logging_middleware(request, call_next):
+    start = time.perf_counter()
+    response = None
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        status = getattr(response, "status_code", 500)
+        duration_ms = (time.perf_counter() - start) * 1000.0
+        logger.info(
+            "request method=%s path=%s status=%s duration_ms=%.2f client=%s",
+            request.method,
+            request.url.path,
+            status,
+            duration_ms,
+            request.client.host if request.client else "unknown",
+        )
+
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")

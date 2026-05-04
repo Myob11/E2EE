@@ -8,6 +8,8 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
+import time
 import redis
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -15,7 +17,32 @@ from redis.exceptions import RedisError
 
 app = FastAPI()
 
-# MongoDB connection (will be set via environment variables)
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logger = logging.getLogger("message_service")
+
+
+@app.middleware("http")
+async def request_logging_middleware(request, call_next):
+    start = time.perf_counter()
+    response = None
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        status = getattr(response, "status_code", 500)
+        duration_ms = (time.perf_counter() - start) * 1000.0
+        logger.info(
+            "request method=%s path=%s status=%s duration_ms=%.2f client=%s",
+            request.method,
+            request.url.path,
+            status,
+            duration_ms,
+            request.client.host if request.client else "unknown",
+        )
+
 MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://mongodb:27017")
 MONGODB_DB = os.getenv("MONGODB_DB", "messages_db")
 CHAT_SERVICE_URL = os.getenv("CHAT_SERVICE_URL", "http://chat_service:8002")
@@ -66,7 +93,6 @@ def _serialize_message_for_user(client: redis.Redis, message: dict, current_user
     response["is_read"] = bool(is_read)
     return response
 
-# Pydantic models
 class MessageCreate(BaseModel):
     chat_id: str
     sender_id: str
