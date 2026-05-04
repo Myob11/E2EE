@@ -602,7 +602,7 @@ Get stored metadata for the profile picture.
 }
 ```
 
-For frontend implementation details and request flow, see [PROFILE_PICTURE_API.md](../PROFILE_PICTURE_API.md).
+For frontend implementation details and request flow, see [PROFILE_PICTURE_API.md](./PROFILE_PICTURE_API.md).
 
 ---
 

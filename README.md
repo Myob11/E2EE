@@ -168,7 +168,7 @@ You can export the diagram with Mermaid tools:
 - Upload/download medijskih datotek preko S3 API.
 - Integracija z MinIO instanco.
 - Generiranje signed URL za varen dostop.
-- Posebni endpointi za profile slike so dokumentirani v [PROFILE_PICTURE_API.md](PROFILE_PICTURE_API.md).
+- Posebni endpointi za profile slike so dokumentirani v [PROFILE_PICTURE_API.md](docs/PROFILE_PICTURE_API.md).
 
 ### 3.5 API Gateway (NGINX)
 - Enotna vstopna tocka za kliente.
