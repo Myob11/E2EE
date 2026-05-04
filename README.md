@@ -29,7 +29,7 @@ flowchart TD
 		B --> D[Chat service]
 		B --> E[Message service]
 		B --> F[Media service]
-        B --> G[Realtime WebSocket<br/>/ws/chats/{chat_id}]
+        B --> G[Realtime WebSocket<br/>/ws/chats/chat_id]
 
 		C --> CDB[(SQL DB<br/>Users)]
 		D --> DDB[(Redis / NoSQL<br/>Active chats)]
