@@ -2,6 +2,9 @@
 
 # E2EE Chat App - Startup Script
 # Usage: ./start.sh
+#
+# IMPORTANT: This script preserves all database volumes on restart.
+# Data in PostgreSQL, Redis, MongoDB, and MinIO persists across stop/start cycles.
 
 set -euo pipefail
 
@@ -15,12 +18,14 @@ fi
 sudo -v
 
 echo "🚀 Starting E2EE Chat App..."
+echo "ℹ️  Database volumes are PRESERVED across restarts"
 
-# Remove old containers to avoid compose bugs
-echo "Cleaning up old containers..."
-sudo "${COMPOSE_CMD[@]}" down --remove-orphans 2>/dev/null || true
+# Stop containers WITHOUT removing volumes (use stop instead of down)
+echo "Stopping existing containers (if any)..."
+sudo "${COMPOSE_CMD[@]}" stop 2>/dev/null || true
 
-echo "Removing stale E2EE containers if present..."
+# Remove orphaned containers only (not volumes!)
+echo "Cleaning up orphaned containers..."
 sudo docker ps -a --filter "name=^/e2ee_" --format '{{.ID}}' | xargs -r sudo docker rm -f 2>/dev/null || true
 
 # Start postgres first and ensure auth database exists.
