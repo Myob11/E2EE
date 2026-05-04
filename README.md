@@ -36,7 +36,7 @@ flowchart TD
         E --> EDB[(Redis / NoSQL<br/>Messages + read state)]
 		F --> FDB[(S3 Storage<br/>MinIO)]
 
-		C --> OBS[Logging & Monitoring<br/>Grafana / ELK]
+        C --> OBS[Logging & Monitoring<br/>Prometheus / Grafana / Loki]
 		D --> OBS
 		E --> OBS
 		F --> OBS
@@ -168,6 +168,7 @@ You can export the diagram with Mermaid tools:
 - Upload/download medijskih datotek preko S3 API.
 - Integracija z MinIO instanco.
 - Generiranje signed URL za varen dostop.
+- Posebni endpointi za profile slike so dokumentirani v [PROFILE_PICTURE_API.md](PROFILE_PICTURE_API.md).
 
 ### 3.5 API Gateway (NGINX)
 - Enotna vstopna tocka za kliente.
@@ -210,7 +211,7 @@ Za prakticno testiranje endpointov uporabi:
 - Mikrostoritve + Docker Compose: da.
 - 1 relacijska + 1 nerelacijska baza: da (SQL + Redis).
 - API gateway/proxy: da (NGINX).
-- Centralizirano logiranje: da (ELK/Grafana stack).
+- Centralizirano logiranje: da (Prometheus + Grafana + Loki).
 - CI/CD pipeline: da (GitHub Actions).
 - Cloudflare account: da.
 - S3 API (MinIO): da.

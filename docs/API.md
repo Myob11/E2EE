@@ -540,6 +540,70 @@ Get a pre-signed URL for uploading media files.
 }
 ```
 
+### Profile Picture Upload URL
+**Endpoint:** `POST /api/profiles/{username}/picture`
+
+Get a pre-signed URL for uploading a user profile picture into MinIO.
+
+**Query Parameters:**
+- `content_type` (optional): `image/jpeg`, `image/png`, `image/webp`, or `image/gif`
+
+**Response:**
+```json
+{
+  "username": "john_doe",
+  "key": "profiles/john_doe/picture",
+  "upload_url": "http://212.235.185.13:9000/profiles/profiles/john_doe/picture?AWSAccessKeyId=...",
+  "expires_at": "2026-05-04T10:24:07Z"
+}
+```
+
+### Profile Picture Complete
+**Endpoint:** `POST /api/profiles/{username}/picture/complete`
+
+Mark a profile picture upload as complete.
+
+**Request Body:**
+```json
+{
+  "size": 125432
+}
+```
+
+### Profile Picture Download URL
+**Endpoint:** `GET /api/profiles/{username}/picture`
+
+Get a pre-signed URL for displaying the profile picture in the app.
+
+**Response:**
+```json
+{
+  "username": "john_doe",
+  "key": "profiles/john_doe/picture",
+  "download_url": "http://212.235.185.13:9000/profiles/profiles/john_doe/picture?AWSAccessKeyId=...",
+  "expires_at": "2026-05-04T10:24:23Z",
+  "content_type": "image/jpeg"
+}
+```
+
+### Profile Picture Metadata
+**Endpoint:** `GET /api/profiles/{username}/picture/metadata`
+
+Get stored metadata for the profile picture.
+
+**Response:**
+```json
+{
+  "username": "john_doe",
+  "key": "profiles/john_doe/picture",
+  "content_type": "image/jpeg",
+  "size": 125432,
+  "uploaded_at": "2026-05-04T09:24:07Z"
+}
+```
+
+For frontend implementation details and request flow, see [PROFILE_PICTURE_API.md](../PROFILE_PICTURE_API.md).
+
 ---
 
 ### Complete Upload
