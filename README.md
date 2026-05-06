@@ -31,10 +31,12 @@ flowchart TD
 		B --> F[Media service]
         B --> G[Realtime WebSocket<br/>/ws/chats/chat_id]
 
-		C --> CDB[(SQL DB<br/>Users)]
-		D --> DDB[(Redis / NoSQL<br/>Active chats)]
-        E --> EDB[(Redis / NoSQL<br/>Messages + read state)]
-		F --> FDB[(S3 Storage<br/>MinIO)]
+        C --> CDB[(PostgreSQL<br/>Users + key bundles)]
+        D --> RDB[(Redis<br/>Chats)]
+        E --> RDB
+        B --> RDB
+		F --> FDB[(S3 Storage<br/>MinIO endpoint)]
+        E -. not active .-> MDB[(MongoDB container<br/>Provisioned, currently unused)]
 
         C --> OBS[Logging & Monitoring<br/>Prometheus / Grafana / Loki]
 		D --> OBS
