@@ -27,15 +27,15 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - AUTH_SERVICE_URL=http://e2ee_auth_service:8001
-      - CHAT_SERVICE_URL=http://e2ee_chat_service:8002
-      - MESSAGE_SERVICE_URL=http://e2ee_message_service:8003
-      - MEDIA_SERVICE_URL=http://e2ee_media_service:8004
+      - "AUTH_SERVICE_URL=http://e2ee_auth_service:8001"
+      - "CHAT_SERVICE_URL=http://e2ee_chat_service:8002"
+      - "MESSAGE_SERVICE_URL=http://e2ee_message_service:8003"
+      - "MEDIA_SERVICE_URL=http://e2ee_media_service:8004"
       - DOMAIN=secra.top
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - SECRET_KEY=${SECRET_KEY:?Error: SECRET_KEY not set}
+      - "REDIS_PASSWORD=${REDIS_PASSWORD}"
+      - "SECRET_KEY=${SECRET_KEY:?Error: SECRET_KEY not set}"
     depends_on:
       - auth_service
       - chat_service
@@ -57,11 +57,10 @@ services:
     ports:
       - "8001:8001"
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/auth_db
-      - SECRET_KEY=${SECRET_KEY:?Error: SECRET_KEY not set}
+      - "DATABASE_URL=postgresql://demo:demo@postgres:5432/auth_db"
+      - "SECRET_KEY=${SECRET_KEY:?Error: SECRET_KEY not set}"
     depends_on:
-      postgres:
-        condition: service_healthy
+      - postgres
     networks:
       - e2ee_network
     restart: unless-stopped
@@ -79,8 +78,8 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - SECRET_KEY=${SECRET_KEY:?Error: SECRET_KEY not set}
+      - "REDIS_PASSWORD=${REDIS_PASSWORD}"
+      - "SECRET_KEY=${SECRET_KEY:?Error: SECRET_KEY not set}"
     depends_on:
       - redis
     networks:
@@ -98,13 +97,13 @@ services:
     ports:
       - "8003:8003"
     environment:
-      - MONGODB_URL=mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD}@mongodb:27017
+      - "MONGODB_URL=mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD}@mongodb:27017"
       - MONGODB_DB=messages_db
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - CHAT_SERVICE_URL=http://e2ee_chat_service:8002
-      - SECRET_KEY=${SECRET_KEY:?Error: SECRET_KEY not set}
+      - "REDIS_PASSWORD=${REDIS_PASSWORD}"
+      - "CHAT_SERVICE_URL=http://e2ee_chat_service:8002"
+      - "SECRET_KEY=${SECRET_KEY:?Error: SECRET_KEY not set}"
     depends_on:
       - mongodb
       - redis
@@ -141,8 +140,8 @@ services:
     image: postgres:15-alpine
     container_name: e2ee_postgres
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Error: POSTGRES_PASSWORD not set}
+      - "POSTGRES_USER=${POSTGRES_USER:-postgres}"
+      - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=auth_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -171,8 +170,8 @@ services:
     container_name: e2ee_mongodb
     environment:
       - MONGO_INITDB_DATABASE=messages_db
-      - MONGO_INITDB_ROOT_USERNAME=${MONGO_USER:-admin}
-      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:?Error: MONGO_PASSWORD not set}
+      - "MONGO_INITDB_ROOT_USERNAME=${MONGO_USER:-admin}"
+      - "MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:?Error: MONGO_PASSWORD not set}"
     volumes:
       - mongodb_data:/data/db
     networks:
@@ -184,8 +183,8 @@ services:
     container_name: e2ee_minio
     command: server /data --console-address ":9001"
     environment:
-      - MINIO_ROOT_USER=${MINIO_USER:?Error: MINIO_USER not set}
-      - MINIO_ROOT_PASSWORD=${MINIO_PASSWORD:?Error: MINIO_PASSWORD not set}
+      - "MINIO_ROOT_USER=${MINIO_USER:?Error: MINIO_USER not set}"
+      - "MINIO_ROOT_PASSWORD=${MINIO_PASSWORD:?Error: MINIO_PASSWORD not set}"
     volumes:
       - minio_data:/data
     networks:

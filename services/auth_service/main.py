@@ -9,7 +9,7 @@ import bcrypt
 import psycopg2
 import psycopg2.extras
 from psycopg2 import sql
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import unquote, urlparse, urlunparse
 import os
 import logging
 import time
@@ -104,7 +104,15 @@ class KeyBundleResponse(BaseModel):
 
 
 def get_db_conn():
-    return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+    parsed = urlparse(DATABASE_URL)
+    return psycopg2.connect(
+        host=parsed.hostname or "postgres",
+        port=parsed.port or 5432,
+        user=unquote(parsed.username or "postgres"),
+        password=unquote(parsed.password or ""),
+        dbname=parsed.path.lstrip("/") or "auth_db",
+        cursor_factory=psycopg2.extras.RealDictCursor,
+    )
 
 
 def get_admin_db_url():
