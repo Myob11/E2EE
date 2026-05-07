@@ -11,6 +11,13 @@ set -euo pipefail
 
 COMPOSE_CMD=(docker compose -f docker-compose.yml)
 
+# If the user is in the docker group, avoid using sudo to allow smoother CI/local runs
+if groups "$(whoami)" | grep -q '\bdocker\b'; then
+	SUDO=""
+else
+	SUDO="sudo"
+fi
+
 # Check prerequisites
 if ! docker compose version >/dev/null 2>&1; then
 	echo "❌ docker compose (v2) is required but not available"
@@ -43,7 +50,8 @@ sudo docker ps -a --filter "name=^/e2ee_" --format '{{.ID}}' | xargs -r sudo doc
 
 # Build services to ensure latest images
 echo "Building service images..."
-sudo "${COMPOSE_CMD[@]}" build --no-cache
+# Default build without --no-cache for faster iterations; use --no-cache manually when needed
+${SUDO} "${COMPOSE_CMD[@]}" build
 
 # Start postgres first and wait for health check
 echo "Starting PostgreSQL first..."
@@ -77,8 +85,20 @@ echo "Starting remaining services (MongoDB, MinIO, API Gateway, services)..."
 sudo "${COMPOSE_CMD[@]}" up -d
 
 # Wait for all services to be healthy
-echo "Waiting for all services to become ready..."
-sleep 5
+echo "Waiting for API Gateway to report healthy (http://localhost:8000/health)..."
+for i in {1..60}; do
+	if curl -sS --fail http://localhost:8000/health >/dev/null 2>&1; then
+		echo "✅ API Gateway healthy"
+		break
+	fi
+	if [ "$i" -eq 60 ]; then
+		echo "❌ API Gateway did not become healthy in time"
+		${SUDO} "${COMPOSE_CMD[@]}" logs api_gateway || true
+		exit 1
+	fi
+	echo "   Waiting... ($i/60)"
+	sleep 2
+done
 
 echo ""
 echo "✅ All services are running!"

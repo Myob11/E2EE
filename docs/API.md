@@ -226,6 +226,62 @@ One one-time prekey is consumed on each request.
 
 ---
 
+### List Devices
+**Endpoint:** `GET /api/users/{user_id}/devices`
+
+List registered devices and metadata for the authenticated user. Requires `Authorization: Bearer <token>` and the `user_id` in the token must match the path `user_id`.
+
+**Response:**
+```json
+[
+  {
+    "device_id": "android-phone-1",
+    "identity_key": "BASE64_IDENTITY_KEY",
+    "registration_id": 12345
+  }
+]
+```
+
+### Delete Device (Revoke)
+**Endpoint:** `DELETE /api/users/{user_id}/devices/{device_id}`
+
+Revoke and remove a device for the current user. This deletes any pending one-time prekeys for the device and removes the device record.
+
+**Response:**
+```json
+{
+  "user_id": "user_1",
+  "device_id": "android-phone-1",
+  "status": "revoked"
+}
+```
+
+### Rotate Signed Prekey
+**Endpoint:** `POST /api/users/{user_id}/devices/{device_id}/rotate`
+
+Rotate and publish a new signed prekey for an existing device. Body should contain the new `signed_prekey` and optional `registration_id`.
+
+**Request Body:**
+```json
+{
+  "signed_prekey": "BASE64_SIGNED_PREKEY",
+  "registration_id": 12345
+}
+```
+
+**Response:**
+```json
+{
+  "user_id": "user_1",
+  "device_id": "android-phone-1",
+  "status": "rotated"
+}
+```
+
+### Implementation notes: atomic prekey consumption
+The service now stores one-time prekeys in a dedicated table `one_time_prekeys` and consumes them atomically using a `DELETE ... RETURNING` pattern with `FOR UPDATE SKIP LOCKED` to prevent race conditions. Legacy `devices.one_time_prekeys` JSONB arrays are migrated to the new table at startup; the JSONB array is cleared to avoid duplication.
+
+
 ## Chat Service
 
 ### Create Chat

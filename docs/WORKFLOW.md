@@ -332,6 +332,29 @@ breakdown:
    - Consumes one one_time_prekey per request
    - Used for X3DH key exchange
 
+   Additional implementation notes:
+   - One-time prekeys are now stored in a dedicated `one_time_prekeys` table and consumed atomically using `DELETE ... RETURNING` with `FOR UPDATE SKIP LOCKED` semantics to avoid race conditions.
+   - Legacy JSONB arrays in the `devices.one_time_prekeys` column are migrated at startup; the JSONB is cleared after migration to prevent duplication.
+   - New device management endpoints added: `GET /api/users/{user_id}/devices`, `DELETE /api/users/{user_id}/devices/{device_id}`, and `POST /api/users/{user_id}/devices/{device_id}/rotate` for signed-prekey rotation.
+
+   KMS / Vault integration notes
+   - The codebase centralizes secret access via `services/auth_service/secrets.py`. By default it reads environment variables.
+   - For production, integrate HashiCorp Vault (or cloud KMS). Recommended pattern:
+      1. Deploy Vault and enable transit/kv engines.
+      2. Store server-side secrets (JWT signing key, DB passwords, MinIO keys) in Vault.
+      3. Use short-lived tokens or instance-auth (AWS IAM, Kubernetes service account) to fetch secrets at startup.
+      4. Do NOT store client private keys in Vault; clients must keep private keys locally.
+
+   Example Vault usage (high-level):
+   ```bash
+   # store secret
+   vault kv put secret/e2ee JWT_SECRET="<64-char-random>"
+   # read secret (server at startup)
+   export SECRET_KEY=$(vault kv get -field=JWT_SECRET secret/e2ee)
+   ```
+
+   The `secrets.py` helper can be extended to call Vault APIs or use the `hvac` library.
+
 6. **Friend Management**
    - Endpoint: `POST /api/users/{user_id}/friends`
    - Creates friendship record in PostgreSQL

@@ -202,6 +202,35 @@ def setup_database():
                 )
                 """
             )
+            # One-time prekeys stored as separate rows for atomic consumption
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS one_time_prekeys (
+                    id serial PRIMARY KEY,
+                    user_id text NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                    device_id text NOT NULL,
+                    prekey text NOT NULL,
+                    created_at timestamptz NOT NULL DEFAULT now()
+                )
+                """
+            )
+
+            # Migrate any existing JSONB prekeys from devices into one_time_prekeys
+            cur.execute(
+                "SELECT id, user_id, device_id, one_time_prekeys FROM devices WHERE jsonb_array_length(one_time_prekeys) > 0"
+            )
+            rows = cur.fetchall()
+            for row in rows:
+                dev_id = row["device_id"]
+                user_id = row["user_id"]
+                prekeys = row["one_time_prekeys"] or []
+                for pk in prekeys:
+                    cur.execute(
+                        "INSERT INTO one_time_prekeys (user_id, device_id, prekey) VALUES (%s, %s, %s)",
+                        (user_id, dev_id, pk),
+                    )
+                # clear JSONB array to avoid duplication
+                cur.execute("UPDATE devices SET one_time_prekeys = %s WHERE id = %s", (psycopg2.extras.Json([]), row["id"]))
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS friends (
@@ -418,6 +447,22 @@ def register_key_bundle(user_id: str, bundle: SignalKeyBundle, current_user_id: 
                 "UPDATE users SET public_key = %s, registration_id = %s WHERE user_id = %s",
                 (bundle.identity_key, bundle.registration_id, user_id),
             )
+            # Store one-time prekeys into dedicated table for atomic consumption
+            if bundle.one_time_prekeys:
+                cur.execute(
+                    "DELETE FROM one_time_prekeys WHERE user_id = %s AND device_id = %s",
+                    (user_id, device_id),
+                )
+                for pk in bundle.one_time_prekeys:
+                    cur.execute(
+                        "INSERT INTO one_time_prekeys (user_id, device_id, prekey) VALUES (%s, %s, %s)",
+                        (user_id, device_id, pk),
+                    )
+                # clear JSONB storage to avoid duplication
+                cur.execute(
+                    "UPDATE devices SET one_time_prekeys = %s WHERE user_id = %s AND device_id = %s",
+                    (psycopg2.extras.Json([]), user_id, device_id),
+                )
 
     return {"user_id": user_id, "device_id": device_id, "status": "ok"}
 
@@ -433,15 +478,29 @@ def get_key_bundle(user_id: str, device_id: Optional[str] = None):
         raise HTTPException(status_code=404, detail="No device bundle registered")
 
     one_time_prekey = None
-    prekeys = bundle["one_time_prekeys"] or []
-    if prekeys:
-        one_time_prekey = prekeys.pop(0)
-        with get_db_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE devices SET one_time_prekeys = %s WHERE id = %s",
-                    (psycopg2.extras.Json(prekeys), bundle["id"]),
+    # Atomically consume a one-time prekey from the dedicated table to avoid race conditions
+    with get_db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                WITH sel AS (
+                    SELECT id, prekey FROM one_time_prekeys
+                    WHERE user_id = %s AND device_id = %s
+                    ORDER BY id
+                    FOR UPDATE SKIP LOCKED
+                    LIMIT 1
                 )
+                DELETE FROM one_time_prekeys WHERE id IN (SELECT id FROM sel) RETURNING prekey
+                """,
+                (user_id, bundle["device_id"]),
+            )
+            row = cur.fetchone()
+            if row:
+                # row may be a dict or tuple depending on cursor; handle both
+                try:
+                    one_time_prekey = row["prekey"]
+                except Exception:
+                    one_time_prekey = row[0]
 
     return KeyBundleResponse(
         user_id=user_id,
@@ -478,6 +537,89 @@ def get_user_public_key(user_id: str, device_id: Optional[str] = None):
         }
 
     return {"user_id": user_id, "public_key": user.get("public_key")}
+
+
+@app.get("/users/{user_id}/devices")
+def list_devices(user_id: str, current_user_id: str = Depends(parse_bearer_token)):
+    """List devices for the current user."""
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot view devices for another user")
+
+    if not get_user_by_id(user_id):
+        raise HTTPException(status_code=404, detail="User not found")
+
+    with get_db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT device_id, identity_key, signed_prekey, registration_id FROM devices WHERE user_id = %s",
+                (user_id,),
+            )
+            rows = cur.fetchall()
+
+    return [
+        {
+            "device_id": r["device_id"],
+            "identity_key": r["identity_key"],
+            "registration_id": r.get("registration_id"),
+        }
+        for r in rows
+    ]
+
+
+@app.delete("/users/{user_id}/devices/{device_id}")
+def delete_device(user_id: str, device_id: str, current_user_id: str = Depends(parse_bearer_token)):
+    """Revoke and remove a device for the current user."""
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot delete device for another user")
+
+    if not get_user_by_id(user_id):
+        raise HTTPException(status_code=404, detail="User not found")
+
+    with get_db_conn() as conn:
+        with conn.cursor() as cur:
+            # remove any pending prekeys for that device
+            cur.execute(
+                "DELETE FROM one_time_prekeys WHERE user_id = %s AND device_id = %s",
+                (user_id, device_id),
+            )
+            cur.execute(
+                "DELETE FROM devices WHERE user_id = %s AND device_id = %s RETURNING device_id",
+                (user_id, device_id),
+            )
+            deleted = cur.fetchone()
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    return {"user_id": user_id, "device_id": device_id, "status": "revoked"}
+
+
+@app.post("/users/{user_id}/devices/{device_id}/rotate")
+def rotate_signed_prekey(user_id: str, device_id: str, body: dict, current_user_id: str = Depends(parse_bearer_token)):
+    """Rotate the signed prekey for a device. Expects JSON body with `signed_prekey` and optional `registration_id`."""
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot rotate keys for another user")
+
+    if not get_user_by_id(user_id):
+        raise HTTPException(status_code=404, detail="User not found")
+
+    signed_prekey = body.get("signed_prekey")
+    registration_id = body.get("registration_id")
+    if not signed_prekey:
+        raise HTTPException(status_code=400, detail="signed_prekey is required")
+
+    with get_db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE devices SET signed_prekey = %s, registration_id = COALESCE(%s, registration_id) WHERE user_id = %s AND device_id = %s RETURNING device_id",
+                (signed_prekey, registration_id, user_id, device_id),
+            )
+            row = cur.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    return {"user_id": user_id, "device_id": device_id, "status": "rotated"}
 
 
 @app.get("/users", response_model=List[FriendUserResponse])

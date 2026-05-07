@@ -174,6 +174,9 @@ Responsibilities:
 - `GET /api/users?query=xxx` - Search users
 - `POST /api/users/{id}/keys` - Register Signal keys
 - `GET /api/users/{id}/bundle` - Get recipient public keys
+- `GET /api/users/{id}/devices` - List registered devices for the current user
+- `DELETE /api/users/{id}/devices/{device_id}` - Revoke and remove a device
+- `POST /api/users/{id}/devices/{device_id}/rotate` - Rotate signed prekey for a device
 - `POST/GET/DELETE /api/users/{id}/friends` - Manage friends
 
 ### 4.2 Chat Service (Port 8002)

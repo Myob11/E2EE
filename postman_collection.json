@@ -262,6 +262,108 @@
       }
     },
     {
+      "name": "List Devices",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/users/{{user_id}}/devices",
+          "host": ["{{base_url}}"],
+          "path": ["api","users","{{user_id}}","devices"]
+        }
+      },
+      "description": "List registered devices for the authenticated user."
+      ,
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('List devices - 200', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.test('Response is array', function () { pm.expect(json).to.be.an('array'); });",
+              "pm.environment.set('devices_count', json.length.toString());"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Delete Device",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/users/{{user_id}}/devices/{{device_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api","users","{{user_id}}","devices","{{device_id}}"]
+        }
+      },
+      "description": "Revoke and remove a device for the current user."
+      ,
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Delete device - 200', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "if (json.device_id) { pm.environment.set('deleted_device_id', json.device_id); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rotate Signed Prekey",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"signed_prekey\": \"BASE64_NEW_SIGNED_PREKEY\",\n  \"registration_id\": 12345\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/users/{{user_id}}/devices/{{device_id}}/rotate",
+          "host": ["{{base_url}}"],
+          "path": ["api","users","{{user_id}}","devices","{{device_id}}","rotate"]
+        }
+      },
+      "description": "Rotate and publish a new signed prekey for a device."
+      ,
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Rotate signed prekey - 200', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.test('Rotated status', function () { pm.expect(json.status).to.eql('rotated'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "Search Users",
       "request": {
         "method": "GET",
