@@ -347,7 +347,7 @@ Remove a member from a chat.
 
 ## Message Service
 
-The current MVP stores messages, read receipts, and chat indexes in Redis. New messages are published to the Redis channel `chat_messages`, and the API Gateway fans them out to websocket clients in the matching chat room.
+The current MVP stores messages, read receipts, and chat indexes in MongoDB. New messages are published to the WebSocket stream via the API Gateway, and the API Gateway fans them out to websocket clients in the matching chat room.
 
 ### Send Message
 **Endpoint:** `POST /api/chats/{chat_id}/messages`
@@ -478,7 +478,45 @@ Returns whether the authenticated user has read the message.
 
 ---
 
-## Realtime WebSocket Push
+## Message Read Receipts
+
+### Mark Message As Read
+**Endpoint:** `POST /api/messages/{message_id}/read`
+
+Mark a message as read for the authenticated user.
+
+**Headers:**
+- `Authorization: Bearer {{auth_token}}`
+
+**Response:**
+```json
+{
+  "message_id": "msg_f5349dcf",
+  "user_id": "user_11",
+  "is_read": true
+}
+```
+
+---
+
+### Get Message Read Status
+**Endpoint:** `GET /api/messages/{message_id}/read`
+
+Check if the authenticated user has read a specific message.
+
+**Headers:**
+- `Authorization: Bearer {{auth_token}}`
+
+**Response:**
+```json
+{
+  "message_id": "msg_f5349dcf",
+  "user_id": "user_11",
+  "is_read": true
+}
+```
+
+---
 
 ### Chat Stream
 **Endpoint:** `WS /ws/chats/{chat_id}`
@@ -791,31 +829,38 @@ Point the following records to your server's IP:
 
 ## Service Ports (Internal)
 
-| Service | Internal Port | External Port |
-|---------|---------------|---------------|
-| NGINX | 80, 443 | 80, 443 |
-| API Gateway | 8000 | (via NGINX) |
-| Auth Service | 8001 | (via NGINX) |
-| Chat Service | 8002 | (via NGINX) |
-| Message Service | 8003 | (via NGINX) |
-| Media Service | 8004 | (via NGINX) |
-| PostgreSQL | 5432 | - |
-| Redis | 6379 | - |
-| MongoDB | 27017 | - |
-| MinIO | 9000 | - |
-| MinIO Console | 9001 | - |
+| Service | Internal Port | External Port | Access |
+|---------|---------------|---------------|--------|
+| NGINX | 80, 443 | 80, 443 | Public |
+| API Gateway | 8000 | (via NGINX) | Internal |
+| Auth Service | 8001 | (via NGINX) | Internal |
+| Chat Service | 8002 | (via NGINX) | Internal |
+| Message Service | 8003 | (via NGINX) | Internal |
+| Media Service | 8004 | (via NGINX) | Internal |
+| PostgreSQL | 5432 | **Not exposed** | Internal only |
+| MongoDB | 27017 | **Not exposed** | Internal only |
+| MinIO | 9000 | **Not exposed** | Internal only |
+| Prometheus | 9090 | - | Internal only |
+| Grafana | 3000 | - | Internal only |
+| Loki | 3100 | - | Internal only |
+| Alertmanager | 9093 | - | Internal only |
+
+**Security Note:** All databases (PostgreSQL, MongoDB, MinIO) are only accessible within the Docker internal network and are not exposed to the host or internet.
 
 ---
 
 ## Notes
 
-- JWT is required for chat, message, friend, and Signal key-bundle endpoints.
-- Public endpoints in the current backend are `/health`, `/api/auth/register`, `/api/auth/login`, `/api/users/{user_id}/public-key`, `/api/users/{user_id}/bundle`, and the media endpoints.
-- Realtime message delivery is exposed through `/ws/chats/{chat_id}` and requires the same JWT as the HTTP routes.
-- Messages are encrypted on the client using the Signal protocol; the backend stores and relays ciphertext only.
-- Chat and message state are currently backed by Redis. The MongoDB container remains in the compose stack for future expansion, but it is not the current message store.
-- Media files are stored in MinIO (S3-compatible storage).
-- The API Gateway proxies all HTTP requests to the appropriate microservices.
+- **JWT Authentication:** Required for all protected endpoints (chat, message, friend, Signal key-bundle endpoints)
+- **Public Endpoints:** `/health`, `/api/auth/register`, `/api/auth/login`, `/api/users/{user_id}/public-key`, `/api/users/{user_id}/bundle`, and media download endpoints
+- **Realtime Message Delivery:** WebSocket at `/ws/chats/{chat_id}` requires JWT token
+- **End-to-End Encryption:** Messages are encrypted on the client using Signal protocol; backend stores and relays ciphertext only
+- **Chat & Message Storage:** Backed by MongoDB for scalability and flexibility
+- **Media Storage:** Profile pictures and media files stored in MinIO (S3-compatible)
+- **Message Delivery:** API Gateway proxies HTTP requests and distributes WebSocket messages to connected clients
+- **Database Security:** All databases (PostgreSQL, MongoDB, MinIO) are internal-only with strong authentication
+- **Monitoring:** Prometheus metrics, Grafana dashboards, Loki logs, and Alertmanager for proactive monitoring
+- **Health Status:** Each service has health checks; failed services are automatically restarted
 
 ---
 

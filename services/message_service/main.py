@@ -237,14 +237,18 @@ def send_message(chat_id: str, message: MessageCreate, authorization: str = Head
         raise HTTPException(status_code=503, detail="Database unavailable")
 
     # best-effort notify gateway
-    event = {"type": "message.new", "message": {
-        "id": message_payload["id"],
-        "chat_id": message_payload["chat_id"],
-        "sender_id": message_payload["sender_id"],
-        "ciphertext": message_payload["ciphertext"],
-        "message_type": message_payload["message_type"],
-        "created_at": message_payload["created_at"].isoformat(),
-    }}
+    event = {
+        "type": "message.new",
+        "chat_id": chat_id,
+        "message": {
+            "id": message_payload["id"],
+            "chat_id": message_payload["chat_id"],
+            "sender_id": message_payload["sender_id"],
+            "ciphertext": message_payload["ciphertext"],
+            "message_type": message_payload["message_type"],
+            "created_at": message_payload["created_at"].isoformat(),
+        }
+    }
     _post_event_to_gateway(event)
 
     resp = message_payload.copy()
