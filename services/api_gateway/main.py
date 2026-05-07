@@ -11,7 +11,6 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
-import redis.asyncio as redis_async
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
 app = FastAPI()
@@ -37,8 +36,6 @@ CHAT_SERVICE_URL = os.getenv("CHAT_SERVICE_URL", "http://chat_service:8002")
 MESSAGE_SERVICE_URL = os.getenv("MESSAGE_SERVICE_URL", "http://message_service:8003")
 MEDIA_SERVICE_URL = os.getenv("MEDIA_SERVICE_URL", "http://media_service:8004")
 DOMAIN = os.getenv("DOMAIN", "secra.top")
-REDIS_HOST = os.getenv("REDIS_HOST", "redis")
-REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
 
 MESSAGE_EVENTS_CHANNEL = "chat_messages"
@@ -157,8 +154,6 @@ class ConnectionManager:
 
 
 connection_manager = ConnectionManager()
-redis_client: redis_async.Redis | None = None
-redis_listener_task: asyncio.Task | None = None
 
 
 def forward_headers(request: Request):
@@ -204,56 +199,34 @@ async def get_chat_via_gateway(chat_id: str, authorization: str):
         return response.json()
 
 
-async def redis_message_listener():
-    global redis_client
-    while True:
-        try:
-            if redis_client is None:
-                redis_client = redis_async.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+@app.post("/internal/events")
+async def internal_events(request: Request):
+    """Internal endpoint for services to post events (e.g. message.new).
+    This replaces Redis pub/sub for event delivery inside the docker network.
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
 
-            pubsub = redis_client.pubsub()
-            await pubsub.subscribe(MESSAGE_EVENTS_CHANNEL)
-            async for event in pubsub.listen():
-                if event.get("type") != "message":
-                    continue
+    chat_id = payload.get("chat_id")
+    if not chat_id:
+        raise HTTPException(status_code=400, detail="chat_id required")
 
-                raw_payload = event.get("data")
-                if not raw_payload:
-                    continue
-
-                try:
-                    payload = json.loads(raw_payload)
-                except json.JSONDecodeError:
-                    continue
-
-                chat_id = payload.get("chat_id")
-                if chat_id:
-                    await connection_manager.broadcast(chat_id, payload)
-        except asyncio.CancelledError:
-            break
-        except Exception:
-            await asyncio.sleep(2)
+    # broadcast to websocket clients
+    await connection_manager.broadcast(chat_id, payload)
+    return JSONResponse(status_code=200, content={"status": "ok"})
 
 
 @app.on_event("startup")
 async def on_startup():
-    global redis_listener_task
-    redis_listener_task = asyncio.create_task(redis_message_listener())
+    # No external pub/sub required; services will POST events to /internal/events
+    pass
 
 
 @app.on_event("shutdown")
 async def on_shutdown():
-    global redis_listener_task, redis_client
-    if redis_listener_task:
-        redis_listener_task.cancel()
-        try:
-            await redis_listener_task
-        except Exception:
-            pass
-        redis_listener_task = None
-    if redis_client:
-        await redis_client.close()
-        redis_client = None
+    pass
 
 
 # =====================
@@ -509,6 +482,55 @@ async def proxy_delete_message(message_id: str, request: Request):
 # =====================
 # Media Service Routes
 # =====================
+
+@app.post("/api/profiles/{username}/picture")
+async def proxy_get_profile_picture_upload_url(username: str, request: Request, content_type: str = "image/jpeg"):
+    """Proxy to media service - get profile picture upload URL"""
+    headers = forward_headers(request)
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(f"{MEDIA_SERVICE_URL}/profiles/{username}/picture?content_type={content_type}", headers=headers)
+            return build_proxy_response(response)
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"Media service unavailable: {str(e)}")
+
+
+@app.get("/api/profiles/{username}/picture")
+async def proxy_get_profile_picture_download_url(username: str, request: Request):
+    """Proxy to media service - get profile picture download URL"""
+    headers = forward_headers(request)
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(f"{MEDIA_SERVICE_URL}/profiles/{username}/picture", headers=headers)
+            return build_proxy_response(response)
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"Media service unavailable: {str(e)}")
+
+
+@app.get("/api/profiles/{username}/picture/metadata")
+async def proxy_get_profile_picture_metadata(username: str, request: Request):
+    """Proxy to media service - get profile picture metadata"""
+    headers = forward_headers(request)
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(f"{MEDIA_SERVICE_URL}/profiles/{username}/picture/metadata", headers=headers)
+            return build_proxy_response(response)
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"Media service unavailable: {str(e)}")
+
+
+@app.post("/api/profiles/{username}/picture/complete")
+async def proxy_complete_profile_picture_upload(username: str, request: Request):
+    """Proxy to media service - complete profile picture upload"""
+    body = await request.json()
+    headers = forward_headers(request)
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(f"{MEDIA_SERVICE_URL}/profiles/{username}/picture/complete", json=body, headers=headers)
+            return build_proxy_response(response)
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"Media service unavailable: {str(e)}")
+
 
 @app.post("/api/media/upload-url")
 async def proxy_get_upload_url(request: Request):

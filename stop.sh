@@ -4,7 +4,7 @@
 # Usage: ./stop.sh
 #
 # IMPORTANT: This script PRESERVES all database volumes.
-# Data in PostgreSQL, Redis, MongoDB, and MinIO will persist and be available after restart.
+# Data in PostgreSQL, MongoDB, and MinIO will persist and be available after restart.
 # To completely remove volumes (wipe data), use: docker compose down -v
 
 set -euo pipefail
@@ -48,7 +48,6 @@ echo "⚠️  To WIPE all data and volumes, run: sudo docker compose down -v"
 echo ""
 echo "💾 Data Persistence:"
 echo "   - PostgreSQL data:    $(sudo docker volume ls | grep e2ee_postgres_data | awk '{print $2}')"
-echo "   - Redis data:         $(sudo docker volume ls | grep e2ee_redis_data | awk '{print $2}')"
 echo "   - MongoDB data:       $(sudo docker volume ls | grep e2ee_mongodb_data | awk '{print $2}')"
 echo "   - MinIO data:         $(sudo docker volume ls | grep e2ee_minio_data | awk '{print $2}')"
 echo ""

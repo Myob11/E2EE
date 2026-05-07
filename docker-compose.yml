@@ -32,16 +32,12 @@ services:
       - "MESSAGE_SERVICE_URL=http://e2ee_message_service:8003"
       - "MEDIA_SERVICE_URL=http://e2ee_media_service:8004"
       - DOMAIN=secra.top
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - "REDIS_PASSWORD=${REDIS_PASSWORD}"
       - "SECRET_KEY=${SECRET_KEY:?Error: SECRET_KEY not set}"
     depends_on:
       - auth_service
       - chat_service
       - message_service
       - media_service
-      - redis
     networks:
       - e2ee_network
     restart: unless-stopped
@@ -76,12 +72,13 @@ services:
     ports:
       - "8002:8002"
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - "REDIS_PASSWORD=${REDIS_PASSWORD}"
+      - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_DB=messages_db
+      - MONGO_USER=${MONGO_USER:-admin}
+      - "MONGO_PASSWORD=${MONGO_PASSWORD:?Error: MONGO_PASSWORD not set}"
       - "SECRET_KEY=${SECRET_KEY:?Error: SECRET_KEY not set}"
     depends_on:
-      - redis
+      - mongodb
     networks:
       - e2ee_network
     restart: unless-stopped
@@ -97,16 +94,14 @@ services:
     ports:
       - "8003:8003"
     environment:
-      - "MONGODB_URL=mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD}@mongodb:27017"
+      - MONGODB_URL=mongodb://mongodb:27017
       - MONGODB_DB=messages_db
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - "REDIS_PASSWORD=${REDIS_PASSWORD}"
-      - "CHAT_SERVICE_URL=http://e2ee_chat_service:8002"
+      - MONGO_USER=${MONGO_USER:-admin}
+      - "MONGO_PASSWORD=${MONGO_PASSWORD:?Error: MONGO_PASSWORD not set}"
+      - "CHAT_SERVICE_URL=http://chat_service:8002"
       - "SECRET_KEY=${SECRET_KEY:?Error: SECRET_KEY not set}"
     depends_on:
       - mongodb
-      - redis
       - chat_service
     networks:
       - e2ee_network
@@ -123,9 +118,9 @@ services:
     ports:
       - "8004:8004"
     environment:
-      - MINIO_ENDPOINT=212.235.185.13:9000
-      - MINIO_ACCESS_KEY=user-01
-      - MINIO_SECRET_KEY=thestrongestvajePass01
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_PASSWORD:-minioadmin}
       - MINIO_BUCKET=profiles
       - MINIO_SECURE=false
       - DOMAIN=secra.top
@@ -155,15 +150,7 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    container_name: e2ee_redis
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Error: REDIS_PASSWORD not set}"]
-    volumes:
-      - redis_data:/data
-    networks:
-      - e2ee_network
-    restart: unless-stopped
+  # redis removed: using MongoDB as persistent store and HTTP events for pub/sub
 
   mongodb:
     image: mongo:7
@@ -302,7 +289,6 @@ volumes:
   postgres_data:
   mongodb_data:
   minio_data:
-  redis_data:
   prometheus_data:
   grafana_data:
   loki_data:

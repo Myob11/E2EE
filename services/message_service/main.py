@@ -10,10 +10,10 @@ import hmac
 import json
 import logging
 import time
-import redis
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
-from redis.exceptions import RedisError
+from pymongo import MongoClient
+from pymongo.errors import PyMongoError
 
 app = FastAPI()
 
@@ -45,49 +45,59 @@ async def request_logging_middleware(request, call_next):
 
 MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://mongodb:27017")
 MONGODB_DB = os.getenv("MONGODB_DB", "messages_db")
+MONGODB_USER = os.getenv("MONGO_USER", "admin")
+MONGODB_PASSWORD = os.getenv("MONGO_PASSWORD")
 CHAT_SERVICE_URL = os.getenv("CHAT_SERVICE_URL", "http://chat_service:8002")
+GATEWAY_URL = os.getenv("API_GATEWAY_URL", "http://e2ee_api_gateway:8000")
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
-REDIS_HOST = os.getenv("REDIS_HOST", "redis")
-REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-MESSAGE_EVENTS_CHANNEL = os.getenv("MESSAGE_EVENTS_CHANNEL", "chat_messages")
 
 
-def get_redis_conn():
+def get_mongo_client():
     try:
-        return redis.Redis(
-            host=REDIS_HOST,
-            port=REDIS_PORT,
-            decode_responses=True,
-            socket_timeout=3,
+        if MONGODB_USER and MONGODB_PASSWORD:
+            return MongoClient(
+                MONGODB_URL,
+                username=MONGODB_USER,
+                password=MONGODB_PASSWORD,
+                authSource="admin",
+                serverSelectionTimeoutMS=5000
+            )
+        return MongoClient(MONGODB_URL, serverSelectionTimeoutMS=5000)
+    except PyMongoError:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+
+def _messages_collection():
+    client = get_mongo_client()
+    return client[MONGODB_DB].messages
+
+
+def _post_event_to_gateway(event: dict):
+    try:
+        req = Request(
+            f"{GATEWAY_URL}/internal/events",
+            data=json.dumps(event).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
         )
-    except RedisError:
-        raise HTTPException(status_code=503, detail="Redis unavailable")
+        with urlopen(req, timeout=3) as resp:
+            return resp.read()
+    except Exception:
+        return None
 
 
-def _message_key(message_id: str) -> str:
-    return f"message:{message_id}"
-
-
-def _chat_messages_key(chat_id: str) -> str:
-    return f"chat_messages:{chat_id}"
-
-
-def _message_reads_key(message_id: str) -> str:
-    return f"message_reads:{message_id}"
-
-
-def _get_message_or_404(client: redis.Redis, message_id: str) -> dict:
-    payload = client.get(_message_key(message_id))
+def _get_message_or_404(db, message_id: str) -> dict:
+    payload = db.find_one({"id": message_id})
     if not payload:
         raise HTTPException(status_code=404, detail="Message not found")
-    return json.loads(payload)
+    return payload
 
 
-def _serialize_message_for_user(client: redis.Redis, message: dict, current_user_id: str) -> dict:
+def _serialize_message_for_user(db, message: dict, current_user_id: str) -> dict:
     if message.get("sender_id") == current_user_id:
         is_read = True
     else:
-        is_read = client.sismember(_message_reads_key(message["id"]), current_user_id)
+        is_read = current_user_id in message.get("reads", [])
 
     response = dict(message)
     response["is_read"] = bool(is_read)
@@ -206,11 +216,10 @@ def send_message(chat_id: str, message: MessageCreate, authorization: str = Head
 
     ensure_chat_membership(chat_id, current_user_id, authorization)
 
-    client = get_redis_conn()
+    db = _messages_collection()
 
     message_id = f"msg_{uuid.uuid4().hex[:8]}"
-    created_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    score = _parse_utc_timestamp(created_at).timestamp()
+    created_at = datetime.now(timezone.utc)
 
     message_payload = {
         "id": message_id,
@@ -219,19 +228,28 @@ def send_message(chat_id: str, message: MessageCreate, authorization: str = Head
         "ciphertext": message.ciphertext,
         "message_type": message.message_type,
         "created_at": created_at,
+        "reads": [message.sender_id],
     }
 
     try:
-        pipe = client.pipeline()
-        pipe.set(_message_key(message_id), json.dumps(message_payload))
-        pipe.zadd(_chat_messages_key(chat_id), {message_id: score})
-        pipe.sadd(_message_reads_key(message_id), message.sender_id)
-        pipe.execute()
-        client.publish(MESSAGE_EVENTS_CHANNEL, json.dumps({"type": "message.new", **message_payload}))
-    except RedisError:
-        raise HTTPException(status_code=503, detail="Redis unavailable")
+        db.insert_one(message_payload)
+    except PyMongoError:
+        raise HTTPException(status_code=503, detail="Database unavailable")
 
-    return MessageResponse(**_serialize_message_for_user(client, message_payload, current_user_id))
+    # best-effort notify gateway
+    event = {"type": "message.new", "message": {
+        "id": message_payload["id"],
+        "chat_id": message_payload["chat_id"],
+        "sender_id": message_payload["sender_id"],
+        "ciphertext": message_payload["ciphertext"],
+        "message_type": message_payload["message_type"],
+        "created_at": message_payload["created_at"].isoformat(),
+    }}
+    _post_event_to_gateway(event)
+
+    resp = message_payload.copy()
+    resp["created_at"] = resp["created_at"].isoformat()
+    return MessageResponse(**_serialize_message_for_user(db, resp, current_user_id))
 
 @app.get("/chats/{chat_id}/messages", response_model=List[MessageResponse])
 def get_messages(chat_id: str, limit: int = 50, before: Optional[str] = None, authorization: str = Header(None), current_user_id: str = Depends(parse_bearer_token)):
@@ -240,31 +258,23 @@ def get_messages(chat_id: str, limit: int = 50, before: Optional[str] = None, au
         raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
 
     ensure_chat_membership(chat_id, current_user_id, authorization)
-    client = get_redis_conn()
+    db = _messages_collection()
 
-    max_score = "+inf"
+    query = {"chat_id": chat_id}
     if before:
-        max_score = f"({_parse_utc_timestamp(before).timestamp()}"
+        before_dt = _parse_utc_timestamp(before)
+        query["created_at"] = {"$lt": before_dt}
 
     try:
-        message_ids = client.zrevrangebyscore(
-            _chat_messages_key(chat_id),
-            max_score,
-            "-inf",
-            start=0,
-            num=limit,
-        )
+        cursor = db.find(query).sort("created_at", -1).limit(limit)
         chat_messages = []
-        for message_id in message_ids:
-            payload = client.get(_message_key(message_id))
-            if not payload:
-                continue
-            chat_messages.append(
-                MessageResponse(**_serialize_message_for_user(client, json.loads(payload), current_user_id))
-            )
+        for msg in cursor:
+            msg_copy = msg.copy()
+            msg_copy["created_at"] = msg_copy["created_at"].isoformat()
+            chat_messages.append(MessageResponse(**_serialize_message_for_user(db, msg_copy, current_user_id)))
         return chat_messages
-    except RedisError:
-        raise HTTPException(status_code=503, detail="Redis unavailable")
+    except PyMongoError:
+        raise HTTPException(status_code=503, detail="Database unavailable")
 
 @app.get("/messages/{message_id}", response_model=MessageResponse)
 def get_message(message_id: str, authorization: str = Header(None), current_user_id: str = Depends(parse_bearer_token)):
@@ -272,18 +282,16 @@ def get_message(message_id: str, authorization: str = Header(None), current_user
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
 
-    client = get_redis_conn()
+    db = _messages_collection()
     try:
-        message = _get_message_or_404(client, message_id)
-    except RedisError:
-        raise HTTPException(status_code=503, detail="Redis unavailable")
+        message = _get_message_or_404(db, message_id)
+        message["created_at"] = message["created_at"].isoformat()
+    except PyMongoError:
+        raise HTTPException(status_code=503, detail="Database unavailable")
 
     ensure_chat_membership(message["chat_id"], current_user_id, authorization)
 
-    try:
-        return MessageResponse(**_serialize_message_for_user(client, message, current_user_id))
-    except RedisError:
-        raise HTTPException(status_code=503, detail="Redis unavailable")
+    return MessageResponse(**_serialize_message_for_user(db, message, current_user_id))
 
 @app.delete("/messages/{message_id}")
 def delete_message(message_id: str, authorization: str = Header(None), current_user_id: str = Depends(parse_bearer_token)):
@@ -291,25 +299,21 @@ def delete_message(message_id: str, authorization: str = Header(None), current_u
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
 
-    client = get_redis_conn()
+    db = _messages_collection()
     try:
-        message = _get_message_or_404(client, message_id)
-    except RedisError:
-        raise HTTPException(status_code=503, detail="Redis unavailable")
+        message = _get_message_or_404(db, message_id)
+    except PyMongoError:
+        raise HTTPException(status_code=503, detail="Database unavailable")
 
     ensure_chat_membership(message["chat_id"], current_user_id, authorization)
 
     if message["sender_id"] != current_user_id:
         raise HTTPException(status_code=403, detail="Only the sender can delete this message")
-    
+
     try:
-        pipe = client.pipeline()
-        pipe.delete(_message_key(message_id))
-        pipe.zrem(_chat_messages_key(message["chat_id"]), message_id)
-        pipe.delete(_message_reads_key(message_id))
-        pipe.execute()
-    except RedisError:
-        raise HTTPException(status_code=503, detail="Redis unavailable")
+        db.delete_one({"id": message_id})
+    except PyMongoError:
+        raise HTTPException(status_code=503, detail="Database unavailable")
 
     return {"message": "Message deleted", "message_id": message_id}
 
@@ -320,18 +324,18 @@ def mark_message_as_read(message_id: str, authorization: str = Header(None), cur
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
 
-    client = get_redis_conn()
+    db = _messages_collection()
     try:
-        message = _get_message_or_404(client, message_id)
-    except RedisError:
-        raise HTTPException(status_code=503, detail="Redis unavailable")
+        message = _get_message_or_404(db, message_id)
+    except PyMongoError:
+        raise HTTPException(status_code=503, detail="Database unavailable")
 
     ensure_chat_membership(message["chat_id"], current_user_id, authorization)
 
     try:
-        client.sadd(_message_reads_key(message_id), current_user_id)
-    except RedisError:
-        raise HTTPException(status_code=503, detail="Redis unavailable")
+        db.update_one({"id": message_id}, {"$addToSet": {"reads": current_user_id}})
+    except PyMongoError:
+        raise HTTPException(status_code=503, detail="Database unavailable")
 
     return ReadStatusResponse(message_id=message_id, user_id=current_user_id, is_read=True)
 
@@ -342,17 +346,17 @@ def get_message_read_status(message_id: str, authorization: str = Header(None), 
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
 
-    client = get_redis_conn()
+    db = _messages_collection()
     try:
-        message = _get_message_or_404(client, message_id)
-    except RedisError:
-        raise HTTPException(status_code=503, detail="Redis unavailable")
+        message = _get_message_or_404(db, message_id)
+    except PyMongoError:
+        raise HTTPException(status_code=503, detail="Database unavailable")
 
     ensure_chat_membership(message["chat_id"], current_user_id, authorization)
 
     try:
-        is_read = message["sender_id"] == current_user_id or client.sismember(_message_reads_key(message_id), current_user_id)
-    except RedisError:
-        raise HTTPException(status_code=503, detail="Redis unavailable")
+        is_read = message["sender_id"] == current_user_id or (current_user_id in message.get("reads", []))
+    except Exception:
+        raise HTTPException(status_code=503, detail="Database unavailable")
 
     return ReadStatusResponse(message_id=message_id, user_id=current_user_id, is_read=bool(is_read))
