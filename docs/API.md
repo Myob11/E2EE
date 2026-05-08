@@ -579,6 +579,12 @@ Check if the authenticated user has read a specific message.
 
 Use this websocket to receive realtime message delivery for a chat. The gateway validates the JWT and checks that the connected user is a chat member before upgrading the connection.
 
+Message delivery flow:
+- The message service stores the ciphertext in MongoDB first.
+- It then POSTs an internal event to the API gateway at `/internal/events`.
+- The gateway fan-outs that event to every websocket client connected to the same `chat_id`.
+- The websocket receives the same `message.new` payload for sender and recipients, so the frontend should deduplicate by `message.id`.
+
 **Authentication:**
 - `?token=<jwt>` query parameter, or
 - `Authorization: Bearer <jwt>` header
@@ -596,16 +602,89 @@ Use this websocket to receive realtime message delivery for a chat. The gateway 
 ```json
 {
   "type": "message.new",
-  "id": "msg_xyz789",
   "chat_id": "chat_abc123",
-  "sender_id": "user_1",
-  "ciphertext": "encrypted_message_content",
-  "message_type": "text",
-  "created_at": "2026-04-20T12:00:00Z"
+  "message": {
+    "id": "msg_xyz789",
+    "chat_id": "chat_abc123",
+    "sender_id": "user_1",
+    "ciphertext": "encrypted_message_content",
+    "message_type": "text",
+    "created_at": "2026-04-20T12:00:00Z"
+  }
 }
 ```
 
 The socket stays open after the initial connect message. Clients can keep it alive with periodic traffic if needed.
+
+**Frontend example (TypeScript / browser WebSocket):**
+```ts
+type ChatEvent =
+  | { type: "connected"; chat_id: string; user_id: string }
+  | {
+      type: "message.new";
+      chat_id: string;
+      message: {
+        id: string;
+        chat_id: string;
+        sender_id: string;
+        ciphertext: string;
+        message_type: string;
+        created_at: string;
+      };
+    };
+
+export function connectChatStream(chatId: string, token: string, onMessage: (payload: ChatEvent) => void) {
+  const socket = new WebSocket(`wss://secra.top/ws/chats/${chatId}?token=${encodeURIComponent(token)}`);
+
+  socket.onopen = () => {
+    console.log("chat websocket connected");
+  };
+
+  socket.onmessage = (event) => {
+    const payload = JSON.parse(event.data) as ChatEvent;
+    onMessage(payload);
+
+    if (payload.type === "message.new") {
+      const message = payload.message;
+
+      // Example UI update path:
+      // - ignore if the message is already in local state
+      // - decrypt ciphertext on the client using the local Signal session state
+      // - append the plaintext to the message list
+      console.log("new message", message.id, message.ciphertext);
+    }
+  };
+
+  socket.onerror = (error) => {
+    console.error("chat websocket error", error);
+  };
+
+  socket.onclose = () => {
+    console.log("chat websocket closed");
+  };
+
+  return socket;
+}
+```
+
+**Frontend example usage:**
+```ts
+const socket = connectChatStream(chatId, authToken, (event) => {
+  if (event.type === "connected") {
+    console.log(`joined chat ${event.chat_id}`);
+    return;
+  }
+
+  if (event.type === "message.new") {
+    const incoming = event.message;
+    // Compare incoming.id with local message IDs to avoid duplicates.
+    // Decrypt incoming.ciphertext on the client, then store/render the plaintext.
+  }
+});
+
+// Later, when leaving the chat screen:
+socket.close();
+```
 
 ---
 
