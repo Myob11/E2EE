@@ -740,14 +740,41 @@ Get a pre-signed S3 URL for uploading a profile picture. This URL is valid for 1
 }
 ```
 
-**cURL Example:**
+**cURL Example (Production):**
 ```bash
-curl -X POST 'http://localhost:8004/profiles/john_doe/picture' \
+curl -X POST 'https://secra.top/api/profiles/john_doe/picture' \
   -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer YOUR_JWT_TOKEN' \
   -d '{"content_type": "image/jpeg"}'
 ```
 
-**JavaScript Example:**
+**cURL Example (Local Development):**
+```bash
+curl -X POST 'http://localhost:8004/profiles/john_doe/picture' \
+  -H 'Content-Type: application/json' \
+  -d '{"content_type": "image/jpeg"}
+```
+
+**JavaScript Example (Production):**
+```javascript
+async function getUploadUrl(username, contentType = 'image/jpeg', token) {
+  const response = await fetch(
+    `https://secra.top/api/profiles/${username}/picture`,
+    {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ content_type: contentType })
+    }
+  );
+  if (!response.ok) throw new Error(`Failed to get upload URL: ${response.status}`);
+  return await response.json();
+}
+```
+
+**JavaScript Example (Local Development):**
 ```javascript
 async function getUploadUrl(username, contentType = 'image/jpeg') {
   const response = await fetch(
@@ -808,10 +835,13 @@ export function ProfilePictureUpload({ username }: { username: string }) {
     try {
       // Step 1: Get presigned upload URL from backend
       const uploadUrlResponse = await fetch(
-        `http://localhost:8004/profiles/${username}/picture`,
+        `https://secra.top/api/profiles/${username}/picture`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`  // Add your JWT token
+          },
           body: JSON.stringify({ content_type: file.type })
         }
       );
@@ -835,10 +865,13 @@ export function ProfilePictureUpload({ username }: { username: string }) {
 
       // Step 3: Mark upload as complete (optional but recommended)
       const completeResponse = await fetch(
-        `http://localhost:8004/profiles/${username}/picture/complete`,
+        `https://secra.top/api/profiles/${username}/picture/complete`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
           body: JSON.stringify({ size: file.size })
         }
       );
@@ -897,7 +930,15 @@ Mark a profile picture upload as complete and store its size (optional but recom
 }
 ```
 
-**cURL Example:**
+**cURL Example (Production):**
+```bash
+curl -X POST 'https://secra.top/api/profiles/john_doe/picture/complete' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  -d '{"size": 125432}'
+```
+
+**cURL Example (Local Development):**
 ```bash
 curl -X POST 'http://localhost:8004/profiles/john_doe/picture/complete' \
   -H 'Content-Type: application/json' \
@@ -925,7 +966,13 @@ Get a pre-signed S3 URL for downloading a profile picture. URL is valid for 1 ho
 }
 ```
 
-**cURL Example:**
+**cURL Example (Production):**
+```bash
+curl 'https://secra.top/api/profiles/john_doe/picture' \
+  -H 'Authorization: Bearer YOUR_JWT_TOKEN'
+```
+
+**cURL Example (Local Development):**
 ```bash
 curl 'http://localhost:8004/profiles/john_doe/picture'
 ```
@@ -943,8 +990,10 @@ export function ProfilePictureDisplay({ username }: { username: string }) {
     const fetchProfilePicture = async () => {
       try {
         const response = await fetch(
-          `http://localhost:8004/profiles/${username}/picture`
-        );
+        `https://secra.top/api/profiles/${username}/picture`,
+        {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }
 
         if (response.status === 404) {
           setImageUrl(null); // No picture uploaded yet
@@ -1007,7 +1056,13 @@ Get metadata about a profile picture.
 }
 ```
 
-**cURL Example:**
+**cURL Example (Production):**
+```bash
+curl 'https://secra.top/api/profiles/john_doe/picture/metadata' \
+  -H 'Authorization: Bearer YOUR_JWT_TOKEN'
+```
+
+**cURL Example (Local Development):**
 ```bash
 curl 'http://localhost:8004/profiles/john_doe/picture/metadata'
 ```
