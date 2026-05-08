@@ -52,6 +52,18 @@
     {
       "key": "wss_base_url",
       "value": "wss://secra.top"
+    },
+    {
+      "key": "profile_username",
+      "value": "alice"
+    },
+    {
+      "key": "profile_content_type",
+      "value": "image/jpeg"
+    },
+    {
+      "key": "profile_picture_size",
+      "value": "125432"
     }
   ],
   "item": [
@@ -738,20 +750,22 @@
         "method": "POST",
         "header": [
           {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
             "key": "Authorization",
             "value": "Bearer {{auth_token}}"
           }
         ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content_type\": \"{{profile_content_type}}\"\n}"
+        },
         "url": {
-          "raw": "{{base_url}}/api/profiles/{{register_username}}/picture?content_type=image/jpeg",
+          "raw": "{{base_url}}/api/profiles/{{profile_username}}/picture",
           "host": ["{{base_url}}"],
-          "path": ["api", "profiles", "{{register_username}}", "picture"],
-          "query": [
-            {
-              "key": "content_type",
-              "value": "image/jpeg"
-            }
-          ]
+          "path": ["api", "profiles", "{{profile_username}}", "picture"]
         }
       },
       "event": [
@@ -760,12 +774,13 @@
           "script": {
             "exec": [
               "var json = pm.response.json();",
-              "if (json.upload_url) { pm.environment.set('upload_url', json.upload_url); }"
+              "if (json.upload_url) { pm.environment.set('upload_url', json.upload_url); }",
+              "pm.test('Upload URL returned', function () { pm.expect(json.upload_url).to.exist; });"
             ]
           }
         }
       ],
-      "description": "Get a pre-signed URL for uploading a profile picture to MinIO S3."
+      "description": "Get a pre-signed S3 URL for uploading a profile picture. Returns upload_url, key, and expiration time."
     },
     {
       "name": "Complete Profile Picture Upload",
@@ -783,15 +798,27 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"size\": {{media_size}}\n}"
+          "raw": "{\n  \"size\": {{profile_picture_size}}\n}"
         },
         "url": {
-          "raw": "{{base_url}}/api/profiles/{{register_username}}/picture/complete",
+          "raw": "{{base_url}}/api/profiles/{{profile_username}}/picture/complete",
           "host": ["{{base_url}}"],
-          "path": ["api", "profiles", "{{register_username}}", "picture", "complete"]
+          "path": ["api", "profiles", "{{profile_username}}", "picture", "complete"]
         }
       },
-      "description": "Mark a profile picture upload as complete and store its metadata."
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Upload marked complete', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.test('Size stored', function () { pm.expect(json.size).to.equal({{profile_picture_size}}); });"
+            ]
+          }
+        }
+      ],
+      "description": "Mark a profile picture upload as complete and store its metadata (size, timestamp)."
     },
     {
       "name": "Get Profile Picture Download URL",
@@ -804,9 +831,9 @@
           }
         ],
         "url": {
-          "raw": "{{base_url}}/api/profiles/{{register_username}}/picture",
+          "raw": "{{base_url}}/api/profiles/{{profile_username}}/picture",
           "host": ["{{base_url}}"],
-          "path": ["api", "profiles", "{{register_username}}", "picture"]
+          "path": ["api", "profiles", "{{profile_username}}", "picture"]
         }
       },
       "event": [
@@ -815,12 +842,14 @@
           "script": {
             "exec": [
               "var json = pm.response.json();",
-              "if (json.download_url) { pm.environment.set('download_url', json.download_url); }"
+              "if (json.download_url) { pm.environment.set('download_url', json.download_url); }",
+              "pm.test('Download URL returned', function () { pm.expect(json.download_url).to.exist; });",
+              "pm.test('Content type included', function () { pm.expect(json.content_type).to.exist; });"
             ]
           }
         }
       ],
-      "description": "Get a pre-signed URL for downloading a profile picture from MinIO S3."
+      "description": "Get a pre-signed S3 URL for downloading a profile picture. Returns download_url, content_type, and expiration time."
     },
     {
       "name": "Get Profile Picture Metadata",
@@ -833,12 +862,26 @@
           }
         ],
         "url": {
-          "raw": "{{base_url}}/api/profiles/{{register_username}}/picture/metadata",
+          "raw": "{{base_url}}/api/profiles/{{profile_username}}/picture/metadata",
           "host": ["{{base_url}}"],
-          "path": ["api", "profiles", "{{register_username}}", "picture", "metadata"]
+          "path": ["api", "profiles", "{{profile_username}}", "picture", "metadata"]
         }
       },
-      "description": "Get metadata about a profile picture (content type, size, upload date)."
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Metadata returned', function () { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.test('Has size field', function () { pm.expect(json.size).to.exist; });",
+              "pm.test('Has upload date', function () { pm.expect(json.uploaded_at).to.exist; });",
+              "pm.test('Has content type', function () { pm.expect(json.content_type).to.exist; });"
+            ]
+          }
+        }
+      ],
+      "description": "Get metadata about a profile picture including content type, size (bytes), and upload timestamp."
     },
     {
       "name": "WSS Chat Stream",
