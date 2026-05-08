@@ -696,8 +696,8 @@ The media service provides profile picture management using MinIO S3 storage for
 
 **Current Setup:**
 - **Endpoint**: External MinIO at `212.235.185.13:9000`
-- **Bucket**: `profiles` (contains all profile pictures)
-- **Key Format**: `profiles/{username}/picture`
+- **Bucket**: `user-01` (persistent public MinIO bucket for all profile pictures)
+- **Key Format**: `user-01/profiles/{username}/picture`
 - **Access**: Public URLs via pre-signed URLs (1-hour expiration)
 - **Supported Formats**: JPEG, PNG, WebP, GIF
 
@@ -706,7 +706,7 @@ The media service provides profile picture management using MinIO S3 storage for
 MINIO_ENDPOINT=212.235.185.13:9000
 MINIO_ACCESS_KEY=user-01
 MINIO_SECRET_KEY=thestrongestvajePass01
-MINIO_BUCKET=profiles
+MINIO_BUCKET=user-01
 MINIO_SECURE=false
 DOMAIN=secra.top
 ```
@@ -716,56 +716,159 @@ DOMAIN=secra.top
 ### 1. Get Profile Picture Upload URL
 **Endpoint:** `POST /api/profiles/{username}/picture`
 
-Get a pre-signed S3 URL for uploading a profile picture.
+Get a pre-signed S3 URL for uploading a profile picture. This URL is valid for 1 hour.
 
 **Parameters:**
 - `username` (path): Username for the profile picture
 - `content_type` (query, optional): Image MIME type. Default: `image/jpeg`
   - Supported: `image/jpeg`, `image/png`, `image/webp`, `image/gif`
 
+**Request Body:**
+```json
+{
+  "content_type": "image/jpeg"
+}
+```
+
 **Response:**
 ```json
 {
   "username": "john_doe",
-  "key": "profiles/john_doe/picture",
-  "upload_url": "http://212.235.185.13:9000/profiles/profiles/john_doe/picture?...",
+  "key": "user-01/profiles/john_doe/picture",
+  "upload_url": "http://212.235.185.13:9000/user-01/profiles/john_doe/picture?AWSAccessKeyId=user-01&...",
   "expires_at": "2026-05-04T15:30:00Z"
 }
 ```
 
 **cURL Example:**
 ```bash
-curl -X POST 'http://localhost:8004/profiles/john_doe/picture?content_type=image/jpeg'
+curl -X POST 'http://localhost:8004/profiles/john_doe/picture' \
+  -H 'Content-Type: application/json' \
+  -d '{"content_type": "image/jpeg"}'
 ```
 
 **JavaScript Example:**
 ```javascript
-const response = await fetch(
-  'http://localhost:8004/profiles/john_doe/picture?content_type=image/jpeg',
-  { method: 'POST' }
-);
-const { upload_url } = await response.json();
+async function getUploadUrl(username, contentType = 'image/jpeg') {
+  const response = await fetch(
+    `http://localhost:8004/profiles/${username}/picture`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content_type: contentType })
+    }
+  );
+  if (!response.ok) throw new Error(`Failed to get upload URL: ${response.status}`);
+  return await response.json();
+}
 ```
 
 ---
 
 ### 2. Upload File to MinIO
 
-After receiving the upload URL, upload the file directly to MinIO using a PUT request:
+After receiving the upload URL, upload the file directly to MinIO using a PUT request.
 
 **cURL Example:**
 ```bash
-curl -X PUT 'https://212.235.185.13:9000/...'   -H 'Content-Type: image/jpeg'   --data-binary @/path/to/profile.jpg
+curl -X PUT 'http://212.235.185.13:9000/user-01/profiles/john_doe/picture?AWSAccessKeyId=user-01&...' \
+  -H 'Content-Type: image/jpeg' \
+  --data-binary @/path/to/profile.jpg
 ```
 
-**JavaScript Example:**
-```javascript
-const file = document.getElementById('imageInput').files[0];
-await fetch(upload_url, {
-  method: 'PUT',
-  body: file,
-  headers: { 'Content-Type': 'image/jpeg' }
-});
+**React Component Example:**
+```typescript
+import React, { useState } from 'react';
+
+export function ProfilePictureUpload({ username }: { username: string }) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) {
+      setError('Invalid image format. Please upload JPEG, PNG, WebP, or GIF.');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('File is too large. Maximum size is 5MB.');
+      return;
+    }
+
+    setUploading(true);
+    setError(null);
+    setSuccess(false);
+
+    try {
+      // Step 1: Get presigned upload URL from backend
+      const uploadUrlResponse = await fetch(
+        `http://localhost:8004/profiles/${username}/picture`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content_type: file.type })
+        }
+      );
+
+      if (!uploadUrlResponse.ok) {
+        throw new Error(`Backend error: ${uploadUrlResponse.status}`);
+      }
+
+      const { upload_url } = await uploadUrlResponse.json();
+
+      // Step 2: Upload file directly to MinIO using presigned URL
+      const uploadResponse = await fetch(upload_url, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type }
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error(`MinIO upload failed: ${uploadResponse.status}`);
+      }
+
+      // Step 3: Mark upload as complete (optional but recommended)
+      const completeResponse = await fetch(
+        `http://localhost:8004/profiles/${username}/picture/complete`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ size: file.size })
+        }
+      );
+
+      if (!completeResponse.ok) {
+        console.warn('Failed to mark upload complete, but file was uploaded');
+      }
+
+      setSuccess(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="profile-picture-upload">
+      <input
+        type="file"
+        accept="image/*"
+        onChange={handleFileChange}
+        disabled={uploading}
+      />
+      {uploading && <p>Uploading...</p>}
+      {success && <p style={{ color: 'green' }}>✓ Profile picture uploaded!</p>}
+      {error && <p style={{ color: 'red' }}>✗ {error}</p>}
+    </div>
+  );
+}
 ```
 
 ---
@@ -773,11 +876,10 @@ await fetch(upload_url, {
 ### 3. Mark Profile Picture Upload as Complete
 **Endpoint:** `POST /api/profiles/{username}/picture/complete`
 
-Mark a profile picture upload as complete and store its size.
+Mark a profile picture upload as complete and store its size (optional but recommended).
 
 **Parameters:**
 - `username` (path): Username
-- `size` (body, number): File size in bytes
 
 **Request Body:**
 ```json
@@ -797,7 +899,9 @@ Mark a profile picture upload as complete and store its size.
 
 **cURL Example:**
 ```bash
-curl -X POST 'http://localhost:8004/profiles/john_doe/picture/complete'   -H 'Content-Type: application/json'   -d '{"size": 125432}'
+curl -X POST 'http://localhost:8004/profiles/john_doe/picture/complete' \
+  -H 'Content-Type: application/json' \
+  -d '{"size": 125432}'
 ```
 
 ---
@@ -805,7 +909,7 @@ curl -X POST 'http://localhost:8004/profiles/john_doe/picture/complete'   -H 'Co
 ### 4. Get Profile Picture Download URL
 **Endpoint:** `GET /api/profiles/{username}/picture`
 
-Get a pre-signed S3 URL for downloading a profile picture.
+Get a pre-signed S3 URL for downloading a profile picture. URL is valid for 1 hour.
 
 **Parameters:**
 - `username` (path): Username for the profile picture
@@ -814,8 +918,8 @@ Get a pre-signed S3 URL for downloading a profile picture.
 ```json
 {
   "username": "john_doe",
-  "key": "profiles/john_doe/picture",
-  "download_url": "http://212.235.185.13:9000/profiles/profiles/john_doe/picture?...",
+  "key": "user-01/profiles/john_doe/picture",
+  "download_url": "http://212.235.185.13:9000/user-01/profiles/john_doe/picture?AWSAccessKeyId=user-01&...",
   "expires_at": "2026-05-04T15:30:00Z",
   "content_type": "image/jpeg"
 }
@@ -826,12 +930,60 @@ Get a pre-signed S3 URL for downloading a profile picture.
 curl 'http://localhost:8004/profiles/john_doe/picture'
 ```
 
-**JavaScript Example:**
-```javascript
-const response = await fetch('http://localhost:8004/profiles/john_doe/picture');
-const { download_url } = await response.json();
-const img = document.getElementById('profilePic');
-img.src = download_url;
+**React Component Example:**
+```typescript
+import React, { useState, useEffect } from 'react';
+
+export function ProfilePictureDisplay({ username }: { username: string }) {
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchProfilePicture = async () => {
+      try {
+        const response = await fetch(
+          `http://localhost:8004/profiles/${username}/picture`
+        );
+
+        if (response.status === 404) {
+          setImageUrl(null); // No picture uploaded yet
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error(`Failed to get download URL: ${response.status}`);
+        }
+
+        const { download_url } = await response.json();
+        setImageUrl(download_url);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load profile picture');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfilePicture();
+  }, [username]);
+
+  if (loading) return <div>Loading profile picture...</div>;
+  if (error) return <div style={{ color: 'red' }}>Error: {error}</div>;
+  
+  return (
+    <div className="profile-picture">
+      {imageUrl ? (
+        <img
+          src={imageUrl}
+          alt={`${username}'s profile picture`}
+          style={{ width: '200px', height: '200px', borderRadius: '50%' }}
+        />
+      ) : (
+        <div className="placeholder">No profile picture</div>
+      )}
+    </div>
+  );
+}
 ```
 
 ---
@@ -848,7 +1000,7 @@ Get metadata about a profile picture.
 ```json
 {
   "username": "john_doe",
-  "key": "profiles/john_doe/picture",
+  "key": "user-01/profiles/john_doe/picture",
   "content_type": "image/jpeg",
   "size": 125432,
   "uploaded_at": "2026-05-04T14:30:00Z"
@@ -862,13 +1014,39 @@ curl 'http://localhost:8004/profiles/john_doe/picture/metadata'
 
 ---
 
-### Complete Profile Picture Upload Flow
+### Complete Profile Picture Upload Flow (Step-by-Step)
 
-1. **Get Upload URL**: `POST /api/profiles/{username}/picture?content_type=image/jpeg`
-2. **Upload File**: PUT to the returned `upload_url`
-3. **Mark Complete**: `POST /api/profiles/{username}/picture/complete` with file size
-4. **Download Picture**: `GET /api/profiles/{username}/picture` to get download URL
-5. **View Metadata**: `GET /api/profiles/{username}/picture/metadata` for details
+**Frontend Implementation:**
+
+1. **User selects image from file input**
+   - Validate file type (JPEG, PNG, WebP, GIF)
+   - Validate file size (recommended max 5MB)
+
+2. **Request upload URL from backend:**
+   ```
+   POST /api/profiles/{username}/picture
+   Body: { "content_type": "image/jpeg" }
+   ```
+
+3. **Upload directly to MinIO using presigned URL:**
+   ```
+   PUT {upload_url}
+   Body: file binary data
+   ```
+
+4. **(Optional) Mark upload complete:**
+   ```
+   POST /api/profiles/{username}/picture/complete
+   Body: { "size": file.size }
+   ```
+
+5. **Download picture when needed:**
+   ```
+   GET /api/profiles/{username}/picture
+   Response: { "download_url": "..." }
+   ```
+
+6. **Display image in UI using download_url**
 
 ---
 
@@ -877,9 +1055,10 @@ curl 'http://localhost:8004/profiles/john_doe/picture/metadata'
 | Status | Error | Description |
 |--------|-------|-------------|
 | 400 | Invalid username | Username is empty or invalid |
-| 400 | Invalid image content type | File type is not supported |
+| 400 | Invalid image content type | File type is not supported (only JPEG, PNG, WebP, GIF) |
 | 404 | Profile picture not found | No picture exists for this username |
-| 500 | Server error | MinIO connection failed (will still work locally) |
+| 413 | File too large | File exceeds size limit |
+| 500 | Server error | MinIO connection failed or internal error |
 
 ---
 
