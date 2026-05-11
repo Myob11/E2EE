@@ -131,6 +131,21 @@ The result is a shared session secret stored only on the clients.
 
 No server endpoint is involved in this computation.
 
+### What session state means
+
+When this document says session state, it means the local per-chat, per-device state that the client keeps after the first handshake. In practice it includes:
+
+- the root key used by the Double Ratchet
+- the current sending chain key
+- the current receiving chain key
+- message counters for that chain
+- skipped message keys for out-of-order delivery
+- any metadata needed to resume the ratchet after app restart
+
+This state is not a single key. It is the local record that lets the client derive the next message key and also decrypt older messages that were received out of order or loaded later from history.
+
+If the app deletes this state, the device usually cannot decrypt that chat's old messages again.
+
 ### Step 7: Create or reuse the chat
 
 If the chat does not exist yet, create it first.
@@ -221,6 +236,34 @@ Incoming event example:
 
 The client decrypts the ciphertext locally using the session state for that sender and chat.
 
+### Step 11: Open an existing chat and decrypt older messages
+
+When the user opens a chat screen, the app should load the stored ciphertext history and then decrypt it locally with the saved session state.
+
+Endpoint:
+- GET /api/chats/{chat_id}/messages
+
+Example request:
+```http
+GET /api/chats/chat_abc123/messages?limit=50
+Authorization: Bearer <token>
+```
+
+How this works on the client:
+- fetch the message history from the message service
+- sort or process the messages in chronological order
+- for each ciphertext, look up the saved session state for that sender and chat
+- derive the needed message key from the ratchet state
+- decrypt the ciphertext locally
+- render the plaintext in the chat view
+
+For out-of-order messages, the client may need to use stored skipped message keys before advancing the ratchet.
+
+Important detail:
+- the server only returns ciphertext history
+- the device performs all decryption locally
+- reading old messages depends on keeping the local session state for that chat
+
 ## 3. Endpoint Call Order
 
 For a first message to a new recipient, the usual sequence is:
@@ -240,6 +283,13 @@ For later messages in the same session, the flow is shorter:
 1. Encrypt locally with the stored ratchet state
 2. POST /api/chats/{chat_id}/messages
 3. Receive updates on WS /ws/chats/{chat_id}
+
+For opening an existing chat with history:
+
+1. GET /api/chats/{chat_id}/messages
+2. Load the saved session state for that chat/device
+3. Decrypt the ciphertext history locally
+4. Render plaintext in the UI
 
 ## 4. What the Backend Stores
 
