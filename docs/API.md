@@ -401,6 +401,31 @@ Remove a member from a chat.
 
 ---
 
+### Delete Chat
+**Endpoint:** `DELETE /api/chats/{chat_id}`
+
+Delete an entire chat. Only chat members can delete the chat.
+
+**Headers:**
+- `Authorization: Bearer {{auth_token}}`
+
+**Response:**
+```json
+{
+  "message": "Chat deleted",
+  "chat_id": "chat_abc123"
+}
+```
+
+**Error Response (not a member):**
+```json
+{
+  "detail": "Cannot delete a chat you are not a member of"
+}
+```
+
+---
+
 ## Message Service
 
 The current MVP stores messages, read receipts, and chat indexes in MongoDB. New messages are published to the WebSocket stream via the API Gateway, and the API Gateway fans them out to websocket clients in the matching chat room.
