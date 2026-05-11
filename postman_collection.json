@@ -517,6 +517,24 @@
       }
     },
     {
+      "name": "Delete Chat",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/chats/{{chat_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api","chats","{{chat_id}}"]
+        }
+      },
+      "description": "Delete an entire chat. Only chat members can delete the chat."
+    },
+    {
       "name": "Send Message",
       "request": {
         "method": "POST",
