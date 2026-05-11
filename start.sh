@@ -40,13 +40,25 @@ echo "🚀 Starting E2EE Chat App..."
 echo "ℹ️  Database volumes are PRESERVED across restarts"
 echo "🔐 Loading credentials from .env"
 
-# Stop containers WITHOUT removing volumes (use stop instead of down)
+# Stop containers WITHOUT removing volumes.
+# `docker compose down` removes containers and the project network, but keeps named volumes.
 echo "Stopping existing containers (if any)..."
-sudo "${COMPOSE_CMD[@]}" stop 2>/dev/null || true
+sudo "${COMPOSE_CMD[@]}" down --remove-orphans 2>/dev/null || true
 
-# Remove orphaned containers only (not volumes!)
-echo "Cleaning up orphaned containers..."
-sudo docker ps -a --filter "name=^/e2ee_" --format '{{.ID}}' | xargs -r sudo docker rm -f 2>/dev/null || true
+# Remove any manual containers from earlier debugging runs that can still hold ports.
+echo "Cleaning up stray containers..."
+for container_name in \
+	e2ee_postgres postgres \
+	e2ee_mongodb mongodb \
+	e2ee_minio minio \
+	e2ee_auth_service auth_service \
+	e2ee_chat_service chat_service \
+	e2ee_message_service message_service \
+	e2ee_media_service media_service \
+	e2ee_api_gateway api_gateway \
+	e2ee_nginx nginx; do
+	sudo docker rm -f "$container_name" 2>/dev/null || true
+done
 
 # Build services to ensure latest images
 echo "Building service images..."

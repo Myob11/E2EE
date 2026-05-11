@@ -426,6 +426,17 @@ async def proxy_remove_member(chat_id: str, user_id: str, request: Request):
             raise HTTPException(status_code=503, detail=f"Chat service unavailable: {str(e)}")
 
 
+@app.delete("/api/chats/{chat_id}")
+async def proxy_delete_chat(chat_id: str, request: Request):
+    """Proxy to chat service - delete chat"""
+    headers = forward_headers(request)
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.delete(f"{CHAT_SERVICE_URL}/chats/{chat_id}", headers=headers)
+            return build_proxy_response(response)
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"Chat service unavailable: {str(e)}")
+
 # =====================
 # Message Service Routes
 # =====================
