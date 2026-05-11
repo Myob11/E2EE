@@ -248,3 +248,22 @@ def remove_member(chat_id: str, user_id: str, current_user_id: str = Depends(par
             raise HTTPException(status_code=503, detail="Database unavailable")
     
     return {"message": "Member removed", "chat_id": chat_id, "user_id": user_id}
+
+@app.delete("/chats/{chat_id}")
+def delete_chat(chat_id: str, current_user_id: str = Depends(parse_bearer_token)):
+    """Delete an entire chat. Only members can delete."""
+    db = _chats_collection()
+    try:
+        chat = _get_chat_or_404(db, chat_id)
+    except PyMongoError:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    if current_user_id not in chat["member_ids"]:
+        raise HTTPException(status_code=403, detail="Cannot delete a chat you are not a member of")
+
+    try:
+        db.delete_one({"id": chat_id})
+    except PyMongoError:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    
+    return {"message": "Chat deleted", "chat_id": chat_id}
