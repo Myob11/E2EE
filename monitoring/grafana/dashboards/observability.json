@@ -87,10 +87,46 @@
       ]
     },
     {
+      "type": "timeseries",
+      "title": "Endpoint Call Frequency (Logs)",
+      "datasource": "Loki",
+      "gridPos": {"x": 0, "y": 24, "w": 24, "h": 8},
+      "targets": [
+        {
+          "expr": "sum by (service, method, path) (count_over_time({service=~\".*(api_gateway|auth_service|chat_service|message_service|media_service).*\"} |~ \"request method=\" | regexp \"method=(?P<method>[^ ]+) path=(?P<path>[^ ]+) status=(?P<status>[0-9]+)\" [5m]))",
+          "legendFormat": "{{service}} {{method}} {{path}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Service Accessibility",
+      "datasource": "Prometheus",
+      "gridPos": {"x": 0, "y": 32, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "avg_over_time(up{job=\"services\"}[5m]) * 100",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Service Downtime",
+      "datasource": "Prometheus",
+      "gridPos": {"x": 12, "y": 32, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "(1 - avg_over_time(up{job=\"services\"}[5m])) * 100",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
       "type": "logs",
       "title": "Application Logs",
       "datasource": "Loki",
-      "gridPos": {"x": 0, "y": 24, "w": 24, "h": 10},
+      "gridPos": {"x": 0, "y": 40, "w": 24, "h": 10},
       "targets": [
         {
           "expr": "{service=~\".+\"}"
@@ -108,7 +144,7 @@
       "type": "stat",
       "title": "Log Lines / 5m",
       "datasource": "Loki",
-      "gridPos": {"x": 0, "y": 34, "w": 8, "h": 6},
+      "gridPos": {"x": 0, "y": 50, "w": 8, "h": 6},
       "targets": [
         {
           "expr": "sum(count_over_time({service=~\".+\"}[5m]))"
@@ -126,7 +162,7 @@
       "type": "stat",
       "title": "Errors / 5m",
       "datasource": "Loki",
-      "gridPos": {"x": 8, "y": 34, "w": 8, "h": 6},
+      "gridPos": {"x": 8, "y": 50, "w": 8, "h": 6},
       "targets": [
         {
           "expr": "sum(count_over_time({service=~\".+\"} |= \"ERROR\" [5m]))"
@@ -144,7 +180,7 @@
       "type": "stat",
       "title": "Log Streams / 5m",
       "datasource": "Loki",
-      "gridPos": {"x": 16, "y": 34, "w": 8, "h": 6},
+      "gridPos": {"x": 16, "y": 50, "w": 8, "h": 6},
       "targets": [
         {
           "expr": "count(count_over_time({service=~\".+\"}[5m]))"
