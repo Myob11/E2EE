@@ -41,9 +41,10 @@ Register a new user with public key for E2EE encryption.
   "username": "string",
   "public_key": "string"
 }
-
-
 ---
+---
+
+```
 
 ---
 
@@ -119,7 +120,7 @@ Deletes the authenticated user's account and associated data. This endpoint will
 **Notes:**
 - This operation is destructive and irreversible. Use with caution.
 - The API coordinates with the message, chat, and media services to perform cleanup; failures in downstream services are reported in the `results` object but the user record removal is attempted last.
-- The API coordinates with the message, chat, and media services to perform cleanup; failures in downstream services are reported in the `results.downstream_errors` object but the user record removal is attempted last.
+
 
 Field notes:
 - `messages_deleted`: number of message documents removed for the user.
@@ -774,8 +775,10 @@ The media service provides profile picture management using MinIO S3 storage for
 **Environment Variables:**
 ```yaml
 MINIO_ENDPOINT=212.235.185.13:9000
-MINIO_ACCESS_KEY=user-01
-MINIO_SECRET_KEY=thestrongestvajePass01
+# Credentials should NOT be embedded in documentation. Use environment variables or secrets management.
+# Example (do not commit real secrets):
+MINIO_ACCESS_KEY=${MINIO_USER:-minioadmin}
+MINIO_SECRET_KEY=${MINIO_PASSWORD:-<REDACTED>}
 MINIO_BUCKET=user-01
 MINIO_SECURE=false
 DOMAIN=secra.top
@@ -805,7 +808,7 @@ Get a pre-signed S3 URL for uploading a profile picture. This URL is valid for 1
 {
   "username": "john_doe",
   "key": "user-01/profiles/john_doe/picture",
-  "upload_url": "http://212.235.185.13:9000/user-01/profiles/john_doe/picture?AWSAccessKeyId=user-01&...",
+  "upload_url": "http://212.235.185.13:9000/user-01/profiles/john_doe/picture?AWSAccessKeyId=${MINIO_USER}&...",
   "expires_at": "2026-05-04T15:30:00Z"
 }
 ```
@@ -868,7 +871,7 @@ After receiving the upload URL, upload the file directly to MinIO using a PUT re
 
 **cURL Example:**
 ```bash
-curl -X PUT 'http://212.235.185.13:9000/user-01/profiles/john_doe/picture?AWSAccessKeyId=user-01&...' \
+curl -X PUT 'http://212.235.185.13:9000/user-01/profiles/john_doe/picture?AWSAccessKeyId=${MINIO_USER}&...' \
   -H 'Content-Type: image/jpeg' \
   --data-binary @/path/to/profile.jpg
 ```
@@ -1030,7 +1033,7 @@ Get a pre-signed S3 URL for downloading a profile picture. URL is valid for 1 ho
 {
   "username": "john_doe",
   "key": "user-01/profiles/john_doe/picture",
-  "download_url": "http://212.235.185.13:9000/user-01/profiles/john_doe/picture?AWSAccessKeyId=user-01&...",
+  "download_url": "http://212.235.185.13:9000/user-01/profiles/john_doe/picture?AWSAccessKeyId=${MINIO_USER}&...",
   "expires_at": "2026-05-04T15:30:00Z",
   "content_type": "image/jpeg"
 }
@@ -1324,14 +1327,14 @@ For production with HTTPS:
 ```bash
 curl -X POST https://secra.top/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"username": "alice", "password": "secret123", "public_key": "..."}'
+  -d '{"username": "alice", "password": "<REDACTED_PASSWORD>", "public_key": "..."}'
 ```
 
 ### Login
 ```bash
 curl -X POST https://secra.top/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username": "alice", "password": "secret123"}'
+  -d '{"username": "alice", "password": "<REDACTED_PASSWORD>"}'
 ```
 
 ### Create Chat
