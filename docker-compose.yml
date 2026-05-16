@@ -165,18 +165,6 @@ services:
       - e2ee_network
     restart: unless-stopped
 
-  minio:
-    image: minio/minio:latest
-    container_name: e2ee_minio
-    command: server /data --console-address ":9001"
-    environment:
-      - "MINIO_ROOT_USER=${MINIO_USER:?Error: MINIO_USER not set}"
-      - "MINIO_ROOT_PASSWORD=${MINIO_PASSWORD:?Error: MINIO_PASSWORD not set}"
-    volumes:
-      - minio_data:/data
-    networks:
-      - e2ee_network
-    restart: unless-stopped
 
   # =====================
   # Monitoring & Logging
@@ -288,7 +276,8 @@ networks:
 volumes:
   postgres_data:
   mongodb_data:
-  minio_data:
+  # minio_data removed — using external MinIO instance instead
+  # minio_data:
   prometheus_data:
   grafana_data:
   loki_data:

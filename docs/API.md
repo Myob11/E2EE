@@ -41,7 +41,9 @@ Register a new user with public key for E2EE encryption.
   "username": "string",
   "public_key": "string"
 }
-```
+
+
+---
 
 ---
 
@@ -101,9 +103,15 @@ Deletes the authenticated user's account and associated data. This endpoint will
   "status": "ok",
   "user_id": "user_1",
   "results": {
-    "messages": "deleted",
-    "chats": "cleaned",
-    "profile_picture": "deleted"
+    "messages_deleted": 55,
+    "chats_deleted": 1,
+    "chats_updated": 0,
+    "profile_picture_deleted": true,
+    "downstream_errors": {
+      "message_service": null,
+      "chat_service": null,
+      "media_service": null
+    }
   }
 }
 ```
@@ -111,8 +119,14 @@ Deletes the authenticated user's account and associated data. This endpoint will
 **Notes:**
 - This operation is destructive and irreversible. Use with caution.
 - The API coordinates with the message, chat, and media services to perform cleanup; failures in downstream services are reported in the `results` object but the user record removal is attempted last.
-```
+- The API coordinates with the message, chat, and media services to perform cleanup; failures in downstream services are reported in the `results.downstream_errors` object but the user record removal is attempted last.
 
+Field notes:
+- `messages_deleted`: number of message documents removed for the user.
+- `chats_deleted`: number of individual (1:1) chats deleted.
+- `chats_updated`: number of group chats where the user was removed.
+- `profile_picture_deleted`: boolean indicating whether the profile picture deletion was attempted successfully.
+- `downstream_errors`: per-service error strings (or `null`) when the cleanup attempts hit downstream failures.
 ---
 
 ### Get User Public Key
