@@ -1,16 +1,19 @@
 # E2EE Chat App - API Documentation
 
 ## Base URL
-```
+
+Production:
+```text
 https://secra.top
 ```
 
-For local development:
-```
+Local development:
+```text
 http://localhost:8000
 ```
 
 > A Postman collection and environment file are provided in the repository:
+>
 > - `postman_collection.json`
 > - `postman_environment.json`
 >
@@ -18,14 +21,16 @@ http://localhost:8000
 
 ---
 
-## Authentication Service
+# Authentication Service
 
-### Register User
+## Register User
+
 **Endpoint:** `POST /api/auth/register`
 
-Register a new user with public key for E2EE encryption.
+Register a new user with a public key for E2EE encryption.
 
-**Request Body:**
+### Request Body
+
 ```json
 {
   "username": "string",
@@ -34,26 +39,26 @@ Register a new user with public key for E2EE encryption.
 }
 ```
 
-**Response:**
+### Response
+
 ```json
 {
   "id": "user_1",
   "username": "string",
   "public_key": "string"
 }
----
----
-
 ```
 
 ---
 
-### Login
+## Login
+
 **Endpoint:** `POST /api/auth/login`
 
-Login and receive access token.
+Login and receive an access token.
 
-**Request Body:**
+### Request Body
+
 ```json
 {
   "username": "string",
@@ -61,7 +66,8 @@ Login and receive access token.
 }
 ```
 
-**Response:**
+### Response
+
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -71,34 +77,45 @@ Login and receive access token.
 
 ---
 
-### Get Current User
+## Get Current User
+
 **Endpoint:** `GET /api/users/me`
 
 Get current authenticated user info.
 
-**Response:**
+### Response
+
 ```json
 {
   "id": "user_1",
   "username": "string",
   "public_key": "string"
 }
+```
 
 ---
 
-### Delete My Account
+## Delete My Account
+
 **Endpoint:** `DELETE /api/users/me`
 
-Deletes the authenticated user's account and associated data. This endpoint will:
+Deletes the authenticated user's account and associated data.
+
+This endpoint will:
+
 - Delete all messages sent by the user
 - Delete individual (1:1) chats the user is part of and remove the user from group chats
 - Delete the user's profile picture from object storage
 - Remove the user's record from the authentication database (this cascades to devices, keys, and friend relations)
 
-**Headers:**
-- `Authorization: Bearer <jwt>` (required; only the authenticated user may delete their own account)
+### Headers
 
-**Response:**
+```http
+Authorization: Bearer <jwt>
+```
+
+### Response
+
 ```json
 {
   "status": "ok",
@@ -117,25 +134,31 @@ Deletes the authenticated user's account and associated data. This endpoint will
 }
 ```
 
-**Notes:**
-- This operation is destructive and irreversible. Use with caution.
-- The API coordinates with the message, chat, and media services to perform cleanup; failures in downstream services are reported in the `results` object but the user record removal is attempted last.
+### Notes
 
+- This operation is destructive and irreversible.
+- Cleanup failures are reported inside `downstream_errors`.
 
-Field notes:
-- `messages_deleted`: number of message documents removed for the user.
-- `chats_deleted`: number of individual (1:1) chats deleted.
-- `chats_updated`: number of group chats where the user was removed.
-- `profile_picture_deleted`: boolean indicating whether the profile picture deletion was attempted successfully.
-- `downstream_errors`: per-service error strings (or `null`) when the cleanup attempts hit downstream failures.
+### Field Notes
+
+| Field | Description |
+|---|---|
+| `messages_deleted` | Number of message documents removed |
+| `chats_deleted` | Number of deleted 1:1 chats |
+| `chats_updated` | Number of updated group chats |
+| `profile_picture_deleted` | Whether profile picture deletion succeeded |
+| `downstream_errors` | Per-service cleanup errors |
+
 ---
 
-### Get User Public Key
+## Get User Public Key
+
 **Endpoint:** `GET /api/users/{user_id}/public-key`
 
 Get a user's public key for E2EE encryption.
 
-**Response:**
+### Response
+
 ```json
 {
   "user_id": "user_1",
@@ -145,15 +168,20 @@ Get a user's public key for E2EE encryption.
 
 ---
 
-### Search Users
+## Search Users
+
 **Endpoint:** `GET /api/users?query={username_prefix}`
 
-Search for users by username prefix. This is intended for friend search in the frontend.
+Search for users by username prefix.
 
-**Headers:**
-- `Authorization: Bearer {{auth_token}}`
+### Headers
 
-**Response:**
+```http
+Authorization: Bearer {{auth_token}}
+```
+
+### Response
+
 ```json
 [
   {
@@ -167,12 +195,14 @@ Search for users by username prefix. This is intended for friend search in the f
 
 ---
 
-### Register Signal Key Bundle
+## Register Signal Key Bundle
+
 **Endpoint:** `POST /api/users/{user_id}/keys`
 
 Register or refresh a Signal-style key bundle for a user device.
 
-**Request Body:**
+### Request Body
+
 ```json
 {
   "identity_key": "string",
@@ -183,7 +213,8 @@ Register or refresh a Signal-style key bundle for a user device.
 }
 ```
 
-**Response:**
+### Response
+
 ```json
 {
   "user_id": "user_1",
@@ -194,19 +225,22 @@ Register or refresh a Signal-style key bundle for a user device.
 
 ---
 
-### Add Friend
+## Add Friend
+
 **Endpoint:** `POST /api/users/{user_id}/friends`
 
 Add a friend relationship for the authenticated user.
 
-**Request Body:**
+### Request Body
+
 ```json
 {
   "friend_id": "user_2"
 }
 ```
 
-**Response:**
+### Response
+
 ```json
 {
   "user_id": "user_1",
@@ -217,12 +251,14 @@ Add a friend relationship for the authenticated user.
 
 ---
 
-### List Friends
+## List Friends
+
 **Endpoint:** `GET /api/users/{user_id}/friends`
 
 List friends for the authenticated user.
 
-**Response:**
+### Response
+
 ```json
 [
   {
@@ -236,12 +272,14 @@ List friends for the authenticated user.
 
 ---
 
-### Remove Friend
+## Remove Friend
+
 **Endpoint:** `DELETE /api/users/{user_id}/friends/{friend_id}`
 
 Remove an existing friend relationship.
 
-**Response:**
+### Response
+
 ```json
 {
   "user_id": "user_1",
@@ -252,13 +290,16 @@ Remove an existing friend relationship.
 
 ---
 
-### Get User Key Bundle
+## Get User Key Bundle
+
 **Endpoint:** `GET /api/users/{user_id}/bundle`
 
 Retrieve a user's public Signal key bundle for session establishment.
+
 One one-time prekey is consumed on each request.
 
-**Response:**
+### Response
+
 ```json
 {
   "user_id": "user_1",
@@ -272,12 +313,20 @@ One one-time prekey is consumed on each request.
 
 ---
 
-### List Devices
+## List Devices
+
 **Endpoint:** `GET /api/users/{user_id}/devices`
 
-List registered devices and metadata for the authenticated user. Requires `Authorization: Bearer <token>` and the `user_id` in the token must match the path `user_id`.
+List registered devices and metadata for the authenticated user.
 
-**Response:**
+### Headers
+
+```http
+Authorization: Bearer <token>
+```
+
+### Response
+
 ```json
 [
   {
@@ -288,12 +337,16 @@ List registered devices and metadata for the authenticated user. Requires `Autho
 ]
 ```
 
-### Delete Device (Revoke)
+---
+
+## Delete Device (Revoke)
+
 **Endpoint:** `DELETE /api/users/{user_id}/devices/{device_id}`
 
-Revoke and remove a device for the current user. This deletes any pending one-time prekeys for the device and removes the device record.
+Revoke and remove a device for the current user.
 
-**Response:**
+### Response
+
 ```json
 {
   "user_id": "user_1",
@@ -302,12 +355,16 @@ Revoke and remove a device for the current user. This deletes any pending one-ti
 }
 ```
 
-### Rotate Signed Prekey
+---
+
+## Rotate Signed Prekey
+
 **Endpoint:** `POST /api/users/{user_id}/devices/{device_id}/rotate`
 
-Rotate and publish a new signed prekey for an existing device. Body should contain the new `signed_prekey` and optional `registration_id`.
+Rotate and publish a new signed prekey for an existing device.
 
-**Request Body:**
+### Request Body
+
 ```json
 {
   "signed_prekey": "BASE64_SIGNED_PREKEY",
@@ -315,7 +372,8 @@ Rotate and publish a new signed prekey for an existing device. Body should conta
 }
 ```
 
-**Response:**
+### Response
+
 ```json
 {
   "user_id": "user_1",
@@ -324,22 +382,45 @@ Rotate and publish a new signed prekey for an existing device. Body should conta
 }
 ```
 
-### Implementation notes: atomic prekey consumption
-The service now stores one-time prekeys in a dedicated table `one_time_prekeys` and consumes them atomically using a `DELETE ... RETURNING` pattern with `FOR UPDATE SKIP LOCKED` to prevent race conditions. Legacy `devices.one_time_prekeys` JSONB arrays are migrated to the new table at startup; the JSONB array is cleared to avoid duplication.
+---
 
+## Implementation Notes: Atomic Prekey Consumption
 
-## Chat Service
+The service stores one-time prekeys in a dedicated table `one_time_prekeys` and consumes them atomically using:
 
-### Create Chat
+```sql
+DELETE ... RETURNING
+```
+
+with:
+
+```sql
+FOR UPDATE SKIP LOCKED
+```
+
+This prevents race conditions.
+
+Legacy `devices.one_time_prekeys` JSONB arrays are migrated automatically at startup.
+
+---
+
+# Chat Service
+
+## Create Chat
+
 **Endpoint:** `POST /api/chats`
 
 Create a new chat (1:1 or group).
 
-For individual chats (`is_group=false`), the backend enforces uniqueness by member pair:
-- exactly 2 members are required
-- if a chat for the same two members already exists, that existing chat is returned instead of creating a duplicate
+### Notes
 
-**Request Body:**
+For individual chats (`is_group=false`):
+
+- Exactly 2 members are required
+- Existing chats between the same users are reused
+
+### Request Body
+
 ```json
 {
   "name": "string (optional, for groups)",
@@ -348,7 +429,8 @@ For individual chats (`is_group=false`), the backend enforces uniqueness by memb
 }
 ```
 
-**Response:**
+### Response
+
 ```json
 {
   "id": "chat_abc123",
@@ -361,21 +443,27 @@ For individual chats (`is_group=false`), the backend enforces uniqueness by memb
 
 ---
 
-### Get Chats
+## Get Chats
+
 **Endpoint:** `GET /api/chats`
 
-Returns chats for the requested user. The backend forwards query parameters to the chat service.
+Returns chats for the requested user.
 
-**Query Parameters:**
-- `user_id` (required): the ID of the user whose chats should be returned
+### Query Parameters
 
-**Example:**
+| Parameter | Required | Description |
+|---|---|---|
+| `user_id` | Yes | User whose chats should be returned |
+
+### Example
+
 ```http
 GET /api/chats?user_id=user_1
 Authorization: Bearer <token>
 ```
 
-**Response:**
+### Response
+
 ```json
 [
   {
@@ -390,12 +478,14 @@ Authorization: Bearer <token>
 
 ---
 
-### Get Chat
+## Get Chat
+
 **Endpoint:** `GET /api/chats/{chat_id}`
 
 Get a specific chat by ID.
 
-**Response:**
+### Response
+
 ```json
 {
   "id": "chat_abc123",
@@ -408,19 +498,22 @@ Get a specific chat by ID.
 
 ---
 
-### Add Member
+## Add Member
+
 **Endpoint:** `POST /api/chats/{chat_id}/members`
 
 Add a member to a chat.
 
-**Request Body:**
+### Request Body
+
 ```json
 {
   "user_id": "user_3"
 }
 ```
 
-**Response:**
+### Response
+
 ```json
 {
   "message": "Member added",
@@ -431,12 +524,14 @@ Add a member to a chat.
 
 ---
 
-### Remove Member
+## Remove Member
+
 **Endpoint:** `DELETE /api/chats/{chat_id}/members/{user_id}`
 
 Remove a member from a chat.
 
-**Response:**
+### Response
+
 ```json
 {
   "message": "Member removed",
@@ -447,15 +542,22 @@ Remove a member from a chat.
 
 ---
 
-### Delete Chat
+## Delete Chat
+
 **Endpoint:** `DELETE /api/chats/{chat_id}`
 
-Delete an entire chat. Only chat members can delete the chat.
+Delete an entire chat.
 
-**Headers:**
-- `Authorization: Bearer {{auth_token}}`
+Only chat members can delete the chat.
 
-**Response:**
+### Headers
+
+```http
+Authorization: Bearer {{auth_token}}
+```
+
+### Response
+
 ```json
 {
   "message": "Chat deleted",
@@ -463,7 +565,8 @@ Delete an entire chat. Only chat members can delete the chat.
 }
 ```
 
-**Error Response (not a member):**
+### Error Response
+
 ```json
 {
   "detail": "Cannot delete a chat you are not a member of"
@@ -472,16 +575,22 @@ Delete an entire chat. Only chat members can delete the chat.
 
 ---
 
-## Message Service
+# Message Service
 
-The current MVP stores messages, read receipts, and chat indexes in MongoDB. New messages are published to the WebSocket stream via the API Gateway, and the API Gateway fans them out to websocket clients in the matching chat room.
+The MVP stores messages, read receipts, and chat indexes in MongoDB.
 
-### Send Message
+Messages are distributed through the API Gateway WebSocket fan-out system.
+
+---
+
+## Send Message
+
 **Endpoint:** `POST /api/chats/{chat_id}/messages`
 
-Send an encrypted message to a chat. The backend stores ciphertext only.
+Send an encrypted message.
 
-**Request Body:**
+### Request Body
+
 ```json
 {
   "chat_id": "chat_abc123",
@@ -491,7 +600,8 @@ Send an encrypted message to a chat. The backend stores ciphertext only.
 }
 ```
 
-**Response:**
+### Response
+
 ```json
 {
   "id": "msg_xyz789",
@@ -506,16 +616,28 @@ Send an encrypted message to a chat. The backend stores ciphertext only.
 
 ---
 
-### Get Messages
+## Get Messages
+
 **Endpoint:** `GET /api/chats/{chat_id}/messages`
 
-Get messages for a chat with pagination.
+Get messages with pagination.
 
-**Query Parameters:**
-- `limit` (optional, default `50`)
-- `before` (optional ISO-8601 UTC timestamp cursor)
+### Query Parameters
 
-**Response:**
+| Parameter | Default | Description |
+|---|---|---|
+| `limit` | `50` | Number of messages |
+| `before` | - | ISO-8601 UTC cursor |
+
+### Example
+
+```http
+GET /api/chats/chat_abc123/messages?limit=20&before=2026-04-20T12:00:00Z
+Authorization: Bearer <token>
+```
+
+### Response
+
 ```json
 [
   {
@@ -530,20 +652,16 @@ Get messages for a chat with pagination.
 ]
 ```
 
-Example request:
-```http
-GET /api/chats/chat_abc123/messages?limit=20&before=2026-04-20T12:00:00Z
-Authorization: Bearer <token>
-```
-
 ---
 
-### Get Message
+## Get Message
+
 **Endpoint:** `GET /api/messages/{message_id}`
 
 Get a specific message by ID.
 
-**Response:**
+### Response
+
 ```json
 {
   "id": "msg_xyz789",
@@ -558,12 +676,14 @@ Get a specific message by ID.
 
 ---
 
-### Delete Message
+## Delete Message
+
 **Endpoint:** `DELETE /api/messages/{message_id}`
 
 Delete a message sent by the authenticated user.
 
-**Response:**
+### Response
+
 ```json
 {
   "message": "Message deleted",
@@ -573,12 +693,14 @@ Delete a message sent by the authenticated user.
 
 ---
 
-### Mark Message As Read
+## Mark Message As Read
+
 **Endpoint:** `POST /api/messages/{message_id}/read`
 
-Marks the message as read for the authenticated user.
+Mark a message as read.
 
-**Response:**
+### Response
+
 ```json
 {
   "message_id": "msg_f5349dcf",
@@ -589,12 +711,14 @@ Marks the message as read for the authenticated user.
 
 ---
 
-### Get Read Status
+## Get Read Status
+
 **Endpoint:** `GET /api/messages/{message_id}/read`
 
-Returns whether the authenticated user has read the message.
+Get read status for the authenticated user.
 
-**Response:**
+### Response
+
 ```json
 {
   "message_id": "msg_f5349dcf",
@@ -605,62 +729,28 @@ Returns whether the authenticated user has read the message.
 
 ---
 
-## Message Read Receipts
+# Chat Stream (WebSocket)
 
-### Mark Message As Read
-**Endpoint:** `POST /api/messages/{message_id}/read`
-
-Mark a message as read for the authenticated user.
-
-**Headers:**
-- `Authorization: Bearer {{auth_token}}`
-
-**Response:**
-```json
-{
-  "message_id": "msg_f5349dcf",
-  "user_id": "user_11",
-  "is_read": true
-}
-```
-
----
-
-### Get Message Read Status
-**Endpoint:** `GET /api/messages/{message_id}/read`
-
-Check if the authenticated user has read a specific message.
-
-**Headers:**
-- `Authorization: Bearer {{auth_token}}`
-
-**Response:**
-```json
-{
-  "message_id": "msg_f5349dcf",
-  "user_id": "user_11",
-  "is_read": true
-}
-```
-
----
-
-### Chat Stream
 **Endpoint:** `WS /ws/chats/{chat_id}`
 
-Use this websocket to receive realtime message delivery for a chat. The gateway validates the JWT and checks that the connected user is a chat member before upgrading the connection.
+Realtime encrypted message delivery.
 
-Message delivery flow:
-- The message service stores the ciphertext in MongoDB first.
-- It then POSTs an internal event to the API gateway at `/internal/events`.
-- The gateway fan-outs that event to every websocket client connected to the same `chat_id`.
-- The websocket receives the same `message.new` payload for sender and recipients, so the frontend should deduplicate by `message.id`.
+### Authentication
 
-**Authentication:**
-- `?token=<jwt>` query parameter, or
-- `Authorization: Bearer <jwt>` header
+Either:
 
-**Initial server event:**
+```text
+?token=<jwt>
+```
+
+or:
+
+```http
+Authorization: Bearer <jwt>
+```
+
+### Initial Event
+
 ```json
 {
   "type": "connected",
@@ -669,7 +759,8 @@ Message delivery flow:
 }
 ```
 
-**Incoming message event:**
+### Incoming Message Event
+
 ```json
 {
   "type": "message.new",
@@ -685,9 +776,8 @@ Message delivery flow:
 }
 ```
 
-The socket stays open after the initial connect message. Clients can keep it alive with periodic traffic if needed.
+### TypeScript Example
 
-**Frontend example (TypeScript / browser WebSocket):**
 ```ts
 type ChatEvent =
   | { type: "connected"; chat_id: string; user_id: string }
@@ -704,8 +794,14 @@ type ChatEvent =
       };
     };
 
-export function connectChatStream(chatId: string, token: string, onMessage: (payload: ChatEvent) => void) {
-  const socket = new WebSocket(`wss://secra.top/ws/chats/${chatId}?token=${encodeURIComponent(token)}`);
+export function connectChatStream(
+  chatId: string,
+  token: string,
+  onMessage: (payload: ChatEvent) => void
+) {
+  const socket = new WebSocket(
+    `wss://secra.top/ws/chats/${chatId}?token=${encodeURIComponent(token)}`
+  );
 
   socket.onopen = () => {
     console.log("chat websocket connected");
@@ -718,10 +814,6 @@ export function connectChatStream(chatId: string, token: string, onMessage: (pay
     if (payload.type === "message.new") {
       const message = payload.message;
 
-      // Example UI update path:
-      // - ignore if the message is already in local state
-      // - decrypt ciphertext on the client using the local Signal session state
-      // - append the plaintext to the message list
       console.log("new message", message.id, message.ciphertext);
     }
   };
@@ -738,45 +830,28 @@ export function connectChatStream(chatId: string, token: string, onMessage: (pay
 }
 ```
 
-**Frontend example usage:**
-```ts
-const socket = connectChatStream(chatId, authToken, (event) => {
-  if (event.type === "connected") {
-    console.log(`joined chat ${event.chat_id}`);
-    return;
-  }
+---
 
-  if (event.type === "message.new") {
-    const incoming = event.message;
-    // Compare incoming.id with local message IDs to avoid duplicates.
-    // Decrypt incoming.ciphertext on the client, then store/render the plaintext.
-  }
-});
+# Media Service (MinIO S3 Profile Pictures)
 
-// Later, when leaving the chat screen:
-socket.close();
-```
+The media service manages profile pictures using MinIO S3-compatible storage.
 
 ---
 
-## Media Service (MinIO S3 Profile Pictures)
+## MinIO Configuration
 
-The media service provides profile picture management using MinIO S3 storage for persistent, scalable file storage with pre-signed URLs for secure access.
+| Setting | Value |
+|---|---|
+| Endpoint | `212.235.185.13:9000` |
+| Bucket | `user-01` |
+| Key Format | `user-01/profiles/{username}/picture` |
+| URL Expiration | 1 hour |
+| Formats | JPEG, PNG, WebP, GIF |
 
-### MinIO S3 Configuration
+### Environment Variables
 
-**Current Setup:**
-- **Endpoint**: External MinIO at `212.235.185.13:9000`
-- **Bucket**: `user-01` (persistent public MinIO bucket for all profile pictures)
-- **Key Format**: `user-01/profiles/{username}/picture`
-- **Access**: Public URLs via pre-signed URLs (1-hour expiration)
-- **Supported Formats**: JPEG, PNG, WebP, GIF
-
-**Environment Variables:**
 ```yaml
 MINIO_ENDPOINT=212.235.185.13:9000
-# Credentials should NOT be embedded in documentation. Use environment variables or secrets management.
-# Example (do not commit real secrets):
 MINIO_ACCESS_KEY=${MINIO_USER:-minioadmin}
 MINIO_SECRET_KEY=${MINIO_PASSWORD:-<REDACTED>}
 MINIO_BUCKET=user-01
@@ -786,215 +861,61 @@ DOMAIN=secra.top
 
 ---
 
-### 1. Get Profile Picture Upload URL
+## Get Profile Picture Upload URL
+
 **Endpoint:** `POST /api/profiles/{username}/picture`
 
-Get a pre-signed S3 URL for uploading a profile picture. This URL is valid for 1 hour.
+Get a pre-signed upload URL.
 
-**Parameters:**
-- `username` (path): Username for the profile picture
-- `content_type` (query, optional): Image MIME type. Default: `image/jpeg`
-  - Supported: `image/jpeg`, `image/png`, `image/webp`, `image/gif`
+### Request Body
 
-**Request Body:**
 ```json
 {
   "content_type": "image/jpeg"
 }
 ```
 
-**Response:**
+### Response
+
 ```json
 {
   "username": "john_doe",
   "key": "user-01/profiles/john_doe/picture",
-  "upload_url": "http://212.235.185.13:9000/user-01/profiles/john_doe/picture?AWSAccessKeyId=${MINIO_USER}&...",
+  "upload_url": "http://212.235.185.13:9000/user-01/profiles/john_doe/picture?...",
   "expires_at": "2026-05-04T15:30:00Z"
 }
 ```
 
-**cURL Example (Production):**
-```bash
-curl -X POST 'https://secra.top/api/profiles/john_doe/picture' \
-  -H 'Content-Type: application/json' \
-  -H 'Authorization: Bearer YOUR_JWT_TOKEN' \
-  -d '{"content_type": "image/jpeg"}'
-```
-
-**cURL Example (Local Development):**
-```bash
-curl -X POST 'http://localhost:8004/profiles/john_doe/picture' \
-  -H 'Content-Type: application/json' \
-  -d '{"content_type": "image/jpeg"}
-```
-
-**JavaScript Example (Production):**
-```javascript
-async function getUploadUrl(username, contentType = 'image/jpeg', token) {
-  const response = await fetch(
-    `https://secra.top/api/profiles/${username}/picture`,
-    {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ content_type: contentType })
-    }
-  );
-  if (!response.ok) throw new Error(`Failed to get upload URL: ${response.status}`);
-  return await response.json();
-}
-```
-
-**JavaScript Example (Local Development):**
-```javascript
-async function getUploadUrl(username, contentType = 'image/jpeg') {
-  const response = await fetch(
-    `http://localhost:8004/profiles/${username}/picture`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content_type: contentType })
-    }
-  );
-  if (!response.ok) throw new Error(`Failed to get upload URL: ${response.status}`);
-  return await response.json();
-}
-```
-
 ---
 
-### 2. Upload File to MinIO
+## Upload File to MinIO
 
-After receiving the upload URL, upload the file directly to MinIO using a PUT request.
+Use the returned `upload_url`.
 
-**cURL Example:**
+### Example
+
 ```bash
-curl -X PUT 'http://212.235.185.13:9000/user-01/profiles/john_doe/picture?AWSAccessKeyId=${MINIO_USER}&...' \
+curl -X PUT 'http://212.235.185.13:9000/user-01/profiles/john_doe/picture?...' \
   -H 'Content-Type: image/jpeg' \
   --data-binary @/path/to/profile.jpg
 ```
 
-**React Component Example:**
-```typescript
-import React, { useState } from 'react';
-
-export function ProfilePictureUpload({ username }: { username: string }) {
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    // Validate file type
-    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) {
-      setError('Invalid image format. Please upload JPEG, PNG, WebP, or GIF.');
-      return;
-    }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setError('File is too large. Maximum size is 5MB.');
-      return;
-    }
-
-    setUploading(true);
-    setError(null);
-    setSuccess(false);
-
-    try {
-      // Step 1: Get presigned upload URL from backend
-      const uploadUrlResponse = await fetch(
-        `https://secra.top/api/profiles/${username}/picture`,
-        {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`  // Add your JWT token
-          },
-          body: JSON.stringify({ content_type: file.type })
-        }
-      );
-
-      if (!uploadUrlResponse.ok) {
-        throw new Error(`Backend error: ${uploadUrlResponse.status}`);
-      }
-
-      const { upload_url } = await uploadUrlResponse.json();
-
-      // Step 2: Upload file directly to MinIO using presigned URL
-      const uploadResponse = await fetch(upload_url, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': file.type }
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error(`MinIO upload failed: ${uploadResponse.status}`);
-      }
-
-      // Step 3: Mark upload as complete (optional but recommended)
-      const completeResponse = await fetch(
-        `https://secra.top/api/profiles/${username}/picture/complete`,
-        {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ size: file.size })
-        }
-      );
-
-      if (!completeResponse.ok) {
-        console.warn('Failed to mark upload complete, but file was uploaded');
-      }
-
-      setSuccess(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  return (
-    <div className="profile-picture-upload">
-      <input
-        type="file"
-        accept="image/*"
-        onChange={handleFileChange}
-        disabled={uploading}
-      />
-      {uploading && <p>Uploading...</p>}
-      {success && <p style={{ color: 'green' }}>✓ Profile picture uploaded!</p>}
-      {error && <p style={{ color: 'red' }}>✗ {error}</p>}
-    </div>
-  );
-}
-```
-
 ---
 
-### 3. Mark Profile Picture Upload as Complete
+## Mark Upload Complete
+
 **Endpoint:** `POST /api/profiles/{username}/picture/complete`
 
-Mark a profile picture upload as complete and store its size (optional but recommended).
+### Request Body
 
-**Parameters:**
-- `username` (path): Username
-
-**Request Body:**
 ```json
 {
   "size": 125432
 }
 ```
 
-**Response:**
+### Response
+
 ```json
 {
   "message": "Profile picture upload complete",
@@ -1003,122 +924,32 @@ Mark a profile picture upload as complete and store its size (optional but recom
 }
 ```
 
-**cURL Example (Production):**
-```bash
-curl -X POST 'https://secra.top/api/profiles/john_doe/picture/complete' \
-  -H 'Content-Type: application/json' \
-  -H 'Authorization: Bearer YOUR_JWT_TOKEN' \
-  -d '{"size": 125432}'
-```
-
-**cURL Example (Local Development):**
-```bash
-curl -X POST 'http://localhost:8004/profiles/john_doe/picture/complete' \
-  -H 'Content-Type: application/json' \
-  -d '{"size": 125432}'
-```
-
 ---
 
-### 4. Get Profile Picture Download URL
+## Get Profile Picture Download URL
+
 **Endpoint:** `GET /api/profiles/{username}/picture`
 
-Get a pre-signed S3 URL for downloading a profile picture. URL is valid for 1 hour.
+### Response
 
-**Parameters:**
-- `username` (path): Username for the profile picture
-
-**Response:**
 ```json
 {
   "username": "john_doe",
   "key": "user-01/profiles/john_doe/picture",
-  "download_url": "http://212.235.185.13:9000/user-01/profiles/john_doe/picture?AWSAccessKeyId=${MINIO_USER}&...",
+  "download_url": "http://212.235.185.13:9000/user-01/profiles/john_doe/picture?...",
   "expires_at": "2026-05-04T15:30:00Z",
   "content_type": "image/jpeg"
 }
 ```
 
-**cURL Example (Production):**
-```bash
-curl 'https://secra.top/api/profiles/john_doe/picture' \
-  -H 'Authorization: Bearer YOUR_JWT_TOKEN'
-```
-
-**cURL Example (Local Development):**
-```bash
-curl 'http://localhost:8004/profiles/john_doe/picture'
-```
-
-**React Component Example:**
-```typescript
-import React, { useState, useEffect } from 'react';
-
-export function ProfilePictureDisplay({ username }: { username: string }) {
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchProfilePicture = async () => {
-      try {
-        const response = await fetch(
-        `https://secra.top/api/profiles/${username}/picture`,
-        {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }
-
-        if (response.status === 404) {
-          setImageUrl(null); // No picture uploaded yet
-          return;
-        }
-
-        if (!response.ok) {
-          throw new Error(`Failed to get download URL: ${response.status}`);
-        }
-
-        const { download_url } = await response.json();
-        setImageUrl(download_url);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load profile picture');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProfilePicture();
-  }, [username]);
-
-  if (loading) return <div>Loading profile picture...</div>;
-  if (error) return <div style={{ color: 'red' }}>Error: {error}</div>;
-  
-  return (
-    <div className="profile-picture">
-      {imageUrl ? (
-        <img
-          src={imageUrl}
-          alt={`${username}'s profile picture`}
-          style={{ width: '200px', height: '200px', borderRadius: '50%' }}
-        />
-      ) : (
-        <div className="placeholder">No profile picture</div>
-      )}
-    </div>
-  );
-}
-```
-
 ---
 
-### 5. Get Profile Picture Metadata
+## Get Profile Picture Metadata
+
 **Endpoint:** `GET /api/profiles/{username}/picture/metadata`
 
-Get metadata about a profile picture.
+### Response
 
-**Parameters:**
-- `username` (path): Username for the profile picture
-
-**Response:**
 ```json
 {
   "username": "john_doe",
@@ -1129,117 +960,38 @@ Get metadata about a profile picture.
 }
 ```
 
-**cURL Example (Production):**
-```bash
-curl 'https://secra.top/api/profiles/john_doe/picture/metadata' \
-  -H 'Authorization: Bearer YOUR_JWT_TOKEN'
-```
-
-**cURL Example (Local Development):**
-```bash
-curl 'http://localhost:8004/profiles/john_doe/picture/metadata'
-```
-
 ---
 
-### Complete Profile Picture Upload Flow (Step-by-Step)
-
-**Frontend Implementation:**
-
-1. **User selects image from file input**
-   - Validate file type (JPEG, PNG, WebP, GIF)
-   - Validate file size (recommended max 5MB)
-
-2. **Request upload URL from backend:**
-   ```
-   POST /api/profiles/{username}/picture
-   Body: { "content_type": "image/jpeg" }
-   ```
-
-3. **Upload directly to MinIO using presigned URL:**
-   ```
-   PUT {upload_url}
-   Body: file binary data
-   ```
-
-4. **(Optional) Mark upload complete:**
-   ```
-   POST /api/profiles/{username}/picture/complete
-   Body: { "size": file.size }
-   ```
-
-5. **Download picture when needed:**
-   ```
-   GET /api/profiles/{username}/picture
-   Response: { "download_url": "..." }
-   ```
-
-6. **Display image in UI using download_url**
-
----
-
-### Error Responses
+# Error Responses
 
 | Status | Error | Description |
-|--------|-------|-------------|
-| 400 | Invalid username | Username is empty or invalid |
-| 400 | Invalid image content type | File type is not supported (only JPEG, PNG, WebP, GIF) |
-| 404 | Profile picture not found | No picture exists for this username |
-| 413 | File too large | File exceeds size limit |
-| 500 | Server error | MinIO connection failed or internal error |
+|---|---|---|
+| 400 | Invalid username | Username is invalid |
+| 400 | Invalid image content type | Unsupported file type |
+| 404 | Profile picture not found | No picture exists |
+| 413 | File too large | File exceeds limit |
+| 500 | Server error | Internal or MinIO error |
 
 ---
 
-### Fallback Behavior
+# Fallback Behavior
 
-When MinIO is unavailable, the API returns fallback URLs in the format:
-```
+When MinIO is unavailable:
+
+```text
 http://profiles.secra.top/{username}/picture
 ```
 
-This allows the API to respond gracefully even if the S3 service is down.
-
 ---
 
-### Legacy Media Upload Endpoints
+# Health Check
 
-#### Get Media Upload URL
-**Endpoint:** `POST /api/media/upload-url`
+## API Gateway Health
 
-**Request Body:**
-```json
-{
-  "filename": "image.jpg",
-  "content_type": "image/jpeg",
-  "user_id": "user_1"
-}
-```
-
-#### Mark Media Upload Complete
-**Endpoint:** `POST /api/media/complete`
-
-**Request Body:**
-```json
-{
-  "media_id": "media_abc123",
-  "size": 1024000
-}
-```
-
-#### Get Media Download URL
-**Endpoint:** `GET /api/media/{media_id}/download-url`
-
-#### Get Media Metadata
-**Endpoint:** `GET /api/media/{media_id}`
-
----
-
-## Health Check
-
-### API Gateway Health
 **Endpoint:** `GET /health`
 
-**Response:**
+### Response
+
 ```json
 {
   "status": "ok",
@@ -1249,106 +1001,94 @@ This allows the API to respond gracefully even if the S3 service is down.
 
 ---
 
-## Domain Configuration
+# Domain Configuration
 
 | Service | Domain |
-|---------|--------|
+|---|---|
 | API Gateway | `secra.top` |
 | MinIO Console | `minio.secra.top` |
 | Media Files | `media.secra.top` |
 
-### DNS Records (Cloudflare)
-Point the following records to your server's IP:
-
-| Type | Name | Value |
-|------|------|-------|
-| A | secra.top | YOUR_SERVER_IP |
-| A | www.secra.top | YOUR_SERVER_IP |
-| A | minio.secra.top | YOUR_SERVER_IP |
-| A | media.secra.top | YOUR_SERVER_IP |
-
 ---
 
-## Service Ports (Internal)
+# Service Ports
 
 | Service | Internal Port | External Port | Access |
-|---------|---------------|---------------|--------|
+|---|---|---|---|
 | NGINX | 80, 443 | 80, 443 | Public |
-| API Gateway | 8000 | (via NGINX) | Internal |
-| Auth Service | 8001 | (via NGINX) | Internal |
-| Chat Service | 8002 | (via NGINX) | Internal |
-| Message Service | 8003 | (via NGINX) | Internal |
-| Media Service | 8004 | (via NGINX) | Internal |
-| PostgreSQL | 5432 | **Not exposed** | Internal only |
-| MongoDB | 27017 | **Not exposed** | Internal only |
-| MinIO | 9000 | **Not exposed** | Internal only |
-| Prometheus | 9090 | - | Internal only |
-| Grafana | 3000 | - | Internal only |
-| Loki | 3100 | - | Internal only |
-| Alertmanager | 9093 | - | Internal only |
-
-**Security Note:** All databases (PostgreSQL, MongoDB, MinIO) are only accessible within the Docker internal network and are not exposed to the host or internet.
+| API Gateway | 8000 | via NGINX | Internal |
+| Auth Service | 8001 | via NGINX | Internal |
+| Chat Service | 8002 | via NGINX | Internal |
+| Message Service | 8003 | via NGINX | Internal |
+| Media Service | 8004 | via NGINX | Internal |
+| PostgreSQL | 5432 | Not exposed | Internal |
+| MongoDB | 27017 | Not exposed | Internal |
+| MinIO | 9000 | Not exposed | Internal |
 
 ---
 
-## Notes
+# Security Notes
 
-- **JWT Authentication:** Required for all protected endpoints (chat, message, friend, Signal key-bundle endpoints)
-- **Public Endpoints:** `/health`, `/api/auth/register`, `/api/auth/login`, `/api/users/{user_id}/public-key`, `/api/users/{user_id}/bundle`, and media download endpoints
-- **Realtime Message Delivery:** WebSocket at `/ws/chats/{chat_id}` requires JWT token
-- **End-to-End Encryption:** Messages are encrypted on the client using Signal protocol; backend stores and relays ciphertext only
-- **Chat & Message Storage:** Backed by MongoDB for scalability and flexibility
-- **Media Storage:** Profile pictures and media files stored in MinIO (S3-compatible)
-- **Message Delivery:** API Gateway proxies HTTP requests and distributes WebSocket messages to connected clients
-- **Database Security:** All databases (PostgreSQL, MongoDB, MinIO) are internal-only with strong authentication
-- **Monitoring:** Prometheus metrics, Grafana dashboards, Loki logs, and Alertmanager for proactive monitoring
-- **Health Status:** Each service has health checks; failed services are automatically restarted
+- JWT authentication is required for protected endpoints
+- Messages are end-to-end encrypted using the Signal protocol
+- Backend stores ciphertext only
+- Databases are internal-only
+- WebSocket streams require JWT authentication
+- Media is stored in MinIO
+- Services are monitored with Prometheus, Grafana, Loki, and Alertmanager
 
 ---
 
-## SSL/TLS Configuration
+# SSL/TLS Configuration
 
-For production with HTTPS:
+## Let's Encrypt
 
-1. **Using Let's Encrypt (recommended):**
-   ```bash
-   # Install certbot
-   sudo apt install certbot python3-certbot-nginx
+```bash
+sudo apt install certbot python3-certbot-nginx
 
-   # Generate certificate
-   sudo certbot --nginx -d secra.top -d www.secra.top
-   ```
+sudo certbot --nginx -d secra.top -d www.secra.top
+```
 
 ---
 
-## Example Requests
+# Example Requests
 
-### Register User
+## Register User
+
 ```bash
 curl -X POST https://secra.top/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"username": "alice", "password": "<REDACTED_PASSWORD>", "public_key": "..."}'
+  -d '{"username":"alice","password":"<REDACTED_PASSWORD>","public_key":"..."}'
 ```
 
-### Login
+---
+
+## Login
+
 ```bash
 curl -X POST https://secra.top/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username": "alice", "password": "<REDACTED_PASSWORD>"}'
+  -d '{"username":"alice","password":"<REDACTED_PASSWORD>"}'
 ```
 
-### Create Chat
+---
+
+## Create Chat
+
 ```bash
 curl -X POST https://secra.top/api/chats \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <token>" \
-  -d '{"member_ids": ["user_1", "user_2"], "is_group": false}'
+  -d '{"member_ids":["user_1","user_2"],"is_group":false}'
 ```
 
-### Send Message
+---
+
+## Send Message
+
 ```bash
 curl -X POST https://secra.top/api/chats/chat_abc123/messages \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <token>" \
-  -d '{"chat_id": "chat_abc123", "sender_id": "user_1", "ciphertext": "encrypted...", "message_type": "text"}'
+  -d '{"chat_id":"chat_abc123","sender_id":"user_1","ciphertext":"encrypted...","message_type":"text"}'
 ```
