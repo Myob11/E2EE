@@ -269,6 +269,18 @@ async def proxy_get_current_user(request: Request):
             raise HTTPException(status_code=503, detail=f"Auth service unavailable: {str(e)}")
 
 
+@app.delete("/api/users/me")
+async def proxy_delete_current_user(request: Request):
+    """Proxy to auth service - delete current authenticated user"""
+    headers = forward_headers(request)
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.delete(f"{AUTH_SERVICE_URL}/users/me", headers=headers)
+            return build_proxy_response(response)
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"Auth service unavailable: {str(e)}")
+
+
 @app.get("/api/users")
 async def proxy_search_users(request: Request):
     """Proxy to auth service - search users"""
