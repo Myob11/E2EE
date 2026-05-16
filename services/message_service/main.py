@@ -322,6 +322,24 @@ def delete_message(message_id: str, authorization: str = Header(None), current_u
     return {"message": "Message deleted", "message_id": message_id}
 
 
+@app.delete("/messages/by-user/{user_id}")
+def delete_messages_by_user(user_id: str, authorization: str = Header(None), current_user_id: str = Depends(parse_bearer_token)):
+    """Delete all messages sent by a user. Only the user themself may call this."""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot delete messages for another user")
+
+    db = _messages_collection()
+    try:
+        result = db.delete_many({"sender_id": user_id})
+    except PyMongoError:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    return {"deleted_count": result.deleted_count}
+
+
 @app.post("/messages/{message_id}/read", response_model=ReadStatusResponse)
 def mark_message_as_read(message_id: str, authorization: str = Header(None), current_user_id: str = Depends(parse_bearer_token)):
     """Mark a message as read for the authenticated user"""

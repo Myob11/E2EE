@@ -10,6 +10,8 @@ import psycopg2
 import psycopg2.extras
 from psycopg2 import sql
 from urllib.parse import unquote, urlparse, urlunparse
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
 import os
 import logging
 import time
@@ -340,6 +342,29 @@ def parse_bearer_token(authorization: Optional[str] = Header(None)) -> str:
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
 
 
+def decode_token_payload(authorization: Optional[str] = Header(None)) -> dict:
+    if authorization is None or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+    token = authorization.split(" ", 1)[1]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+
+
+def _post_request(url: str, method: str = "POST", headers: dict = None, data: bytes = None, timeout: int = 5):
+    req = Request(url, data=data, headers=headers or {}, method=method)
+    try:
+        with urlopen(req, timeout=timeout) as resp:
+            return resp.read().decode()
+    except HTTPError as exc:
+        body = exc.read().decode() if exc.fp else ""
+        raise HTTPException(status_code=exc.code, detail=body or exc.reason)
+    except URLError:
+        raise HTTPException(status_code=503, detail="Service unavailable")
+
+
 @app.on_event("startup")
 def on_startup():
     setup_database()
@@ -398,6 +423,63 @@ def login(login_data: LoginRequest):
 
     access_token = create_access_token({"sub": user["user_id"], "username": user["username"]})
     return Token(access_token=access_token, token_type="bearer")
+
+
+@app.delete("/users/me")
+def delete_my_account(authorization: Optional[str] = Header(None)):
+    """Delete the authenticated user's account and associated data across services."""
+    # authenticate and decode token
+    payload = decode_token_payload(authorization)
+    user_id = payload.get("sub")
+    username = payload.get("username")
+
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+
+    # call message service to delete messages
+    MESSAGE_SERVICE_URL = os.getenv("MESSAGE_SERVICE_URL", "http://message_service:8003")
+    CHAT_SERVICE_URL = os.getenv("CHAT_SERVICE_URL", "http://chat_service:8002")
+    MEDIA_SERVICE_URL = os.getenv("MEDIA_SERVICE_URL", "http://media_service:8004")
+
+    headers = {"Authorization": authorization} if authorization else {}
+
+    results = {}
+
+    # Delete messages by user
+    try:
+        _post_request(f"{MESSAGE_SERVICE_URL}/messages/by-user/{user_id}", method="DELETE", headers=headers)
+        results["messages"] = "deleted"
+    except HTTPException as exc:
+        # log and continue
+        logger.warning("message service cleanup failed: %s", exc.detail)
+        results["messages"] = f"error: {getattr(exc, 'detail', str(exc))}"
+
+    # Cleanup chats (delete individual chats, remove from groups)
+    try:
+        _post_request(f"{CHAT_SERVICE_URL}/users/{user_id}/cleanup", method="DELETE", headers=headers)
+        results["chats"] = "cleaned"
+    except HTTPException as exc:
+        logger.warning("chat service cleanup failed: %s", exc.detail)
+        results["chats"] = f"error: {getattr(exc, 'detail', str(exc))}"
+
+    # Delete profile picture by username
+    if username:
+        try:
+            _post_request(f"{MEDIA_SERVICE_URL}/profiles/{username}/picture", method="DELETE")
+            results["profile_picture"] = "deleted"
+        except HTTPException as exc:
+            logger.warning("media service cleanup failed: %s", exc.detail)
+            results["profile_picture"] = f"error: {getattr(exc, 'detail', str(exc))}"
+
+    # Finally, remove user from Postgres (cascades to devices, one_time_prekeys, friends)
+    with get_db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM users WHERE user_id = %s RETURNING user_id, username", (user_id,))
+            deleted = cur.fetchone()
+            if not deleted:
+                raise HTTPException(status_code=404, detail="User not found")
+
+    return {"status": "ok", "user_id": user_id, "results": results}
 
 
 @app.get("/users/me", response_model=UserResponse)

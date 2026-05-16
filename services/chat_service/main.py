@@ -267,3 +267,35 @@ def delete_chat(chat_id: str, current_user_id: str = Depends(parse_bearer_token)
         raise HTTPException(status_code=503, detail="Database unavailable")
     
     return {"message": "Chat deleted", "chat_id": chat_id}
+
+
+@app.delete("/users/{user_id}/cleanup")
+def cleanup_user_chats(user_id: str, current_user_id: str = Depends(parse_bearer_token)):
+    """Remove a user from chats: delete 1:1 chats, remove user from group chats. Only the user themself may call this."""
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot cleanup chats for another user")
+
+    db = _chats_collection()
+    try:
+        cursor = db.find({"member_ids": user_id})
+        deleted = 0
+        updated = 0
+        for chat in cursor:
+            chat_id = chat.get("id")
+            if not chat_id:
+                continue
+            if not chat.get("is_group", False):
+                # individual chat -> delete entirely
+                db.delete_one({"id": chat_id})
+                deleted += 1
+            else:
+                # group chat -> remove member
+                members = chat.get("member_ids", [])
+                if user_id in members:
+                    members.remove(user_id)
+                    db.update_one({"id": chat_id}, {"$set": {"member_ids": members}})
+                    updated += 1
+    except Exception:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    return {"chats_deleted": deleted, "chats_updated": updated}

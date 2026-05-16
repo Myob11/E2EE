@@ -326,3 +326,29 @@ def complete_profile_picture_upload(username: str, request: CompletePictureUploa
     logger.info(f"Profile picture upload completed for user {username}, size: {request.size} bytes")
     
     return {"message": "Profile picture upload complete", "username": username, "size": request.size}
+
+
+@app.delete("/profiles/{username}/picture")
+def delete_profile_picture(username: str):
+    """Delete a user's profile picture from storage and metadata. Internal call allowed."""
+    if not username or len(username) < 1:
+        raise HTTPException(status_code=400, detail="Invalid username")
+
+    s3_key = f"profiles/{username}/picture"
+
+    # remove metadata if present
+    if s3_key in media_db:
+        try:
+            del media_db[s3_key]
+        except KeyError:
+            pass
+
+    # attempt to delete from S3/MinIO
+    try:
+        s3 = get_s3_client()
+        s3.delete_object(Bucket=MINIO_BUCKET, Key=s3_key)
+    except Exception:
+        # best-effort; if MinIO unavailable ignore
+        pass
+
+    return {"message": "Profile picture deleted", "username": username}

@@ -80,6 +80,37 @@ Get current authenticated user info.
   "username": "string",
   "public_key": "string"
 }
+
+---
+
+### Delete My Account
+**Endpoint:** `DELETE /api/users/me`
+
+Deletes the authenticated user's account and associated data. This endpoint will:
+- Delete all messages sent by the user
+- Delete individual (1:1) chats the user is part of and remove the user from group chats
+- Delete the user's profile picture from object storage
+- Remove the user's record from the authentication database (this cascades to devices, keys, and friend relations)
+
+**Headers:**
+- `Authorization: Bearer <jwt>` (required; only the authenticated user may delete their own account)
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "user_id": "user_1",
+  "results": {
+    "messages": "deleted",
+    "chats": "cleaned",
+    "profile_picture": "deleted"
+  }
+}
+```
+
+**Notes:**
+- This operation is destructive and irreversible. Use with caution.
+- The API coordinates with the message, chat, and media services to perform cleanup; failures in downstream services are reported in the `results` object but the user record removal is attempted last.
 ```
 
 ---

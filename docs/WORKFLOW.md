@@ -1,3 +1,17 @@
+### Account Deletion Flow
+
+Endpoint: `DELETE /api/users/me` (authenticated)
+
+Sequence:
+- Auth service validates JWT and identifies the user
+- Auth service calls Message Service `DELETE /messages/by-user/{user_id}` to remove sent messages
+- Auth service calls Chat Service `DELETE /users/{user_id}/cleanup` to delete 1:1 chats and remove the user from group chats
+- Auth service calls Media Service `DELETE /profiles/{username}/picture` to delete the profile picture
+- Auth service deletes the user row from PostgreSQL (cascades to devices, one-time prekeys, friends)
+
+Notes:
+- Only the authenticated user may delete their own account
+- This operation is destructive and irreversible
 # 🏗️ E2EE BACKEND SYSTEM - COMPLETE TECHNICAL DOCUMENTATION
 
 ## TABLE OF CONTENTS

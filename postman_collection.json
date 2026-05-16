@@ -907,6 +907,24 @@
         "url": "{{wss_base_url}}/ws/chats/{{chat_id}}?token={{auth_token}}"
       },
       "description": "Open the realtime chat stream in Postman WebSocket mode. The server sends a connected event first, then message.new events for new messages in the chat."
+    },
+    {
+      "name": "Delete My Account",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/users/me",
+          "host": ["{{base_url}}"],
+          "path": ["api","users","me"]
+        }
+      },
+      "description": "Delete the authenticated user's account and all associated data (messages, chats, profile picture)."
     }
   ]
 }
