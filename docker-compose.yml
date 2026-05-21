@@ -199,7 +199,7 @@ services:
     restart: unless-stopped
 
   cadvisor:
-    image: gcr.io/google-containers/cadvisor:latest
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
     container_name: e2ee_cadvisor
     ports:
       - "8080:8080"
