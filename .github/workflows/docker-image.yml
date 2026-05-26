@@ -5,21 +5,137 @@ on:
     branches: [main]
 
 jobs:
-  build-and-optional-test:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.filter.outputs.services }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect changed services
+        id: filter
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BASE_SHA="${{ github.event.before }}"
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
+            BASE_SHA="$(git rev-parse HEAD~1)"
+          fi
+
+          declare -A seen=()
+          services=()
+          rebuild_all=false
+
+          add_service() {
+            local service="$1"
+            if [[ -z "${seen[$service]:-}" ]]; then
+              seen["$service"]=1
+              services+=("$service")
+            fi
+          }
+
+          while IFS= read -r file; do
+            if [[ "$file" == services/api_gateway/nginx/* ]]; then
+              add_service nginx
+            elif [[ "$file" == services/api_gateway/* ]]; then
+              add_service api_gateway
+            elif [[ "$file" == services/auth_service/* ]]; then
+              add_service auth_service
+            elif [[ "$file" == services/chat_service/* ]]; then
+              add_service chat_service
+            elif [[ "$file" == services/message_service/* ]]; then
+              add_service message_service
+            elif [[ "$file" == services/media_service/* ]]; then
+              add_service media_service
+            elif [[ "$file" == monitoring/prometheus/* ]]; then
+              add_service prometheus
+            elif [[ "$file" == monitoring/promtail/* ]]; then
+              add_service promtail
+            elif [[ "$file" == monitoring/alertmanager/* ]]; then
+              add_service alertmanager
+            elif [[ "$file" == monitoring/grafana/* ]]; then
+              add_service grafana
+            elif [[ "$file" == docker-compose.yml || "$file" == init-db.sql ]]; then
+              rebuild_all=true
+            fi
+          done < <(git diff --name-only "$BASE_SHA" "${{ github.sha }}")
+
+          if [[ "$rebuild_all" == true ]]; then
+            services=(nginx api_gateway auth_service chat_service message_service media_service postgres mongodb prometheus node_exporter cadvisor grafana loki promtail alertmanager)
+          fi
+
+          echo "services=${services[*]}" >> "$GITHUB_OUTPUT"
+
+  validate:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.services != ''
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Build containers with Docker Compose
-        run: docker-compose -f docker-compose.yml build
-      # Optional: Add test steps here if you have a service or scripts to test
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate compose file
+        shell: bash
+        run: |
+          set -euo pipefail
+          SECRET_KEY=dummy MONGO_PASSWORD=dummy docker compose config >/dev/null
+
+      - name: Check changed Python services
+        shell: bash
+        run: |
+          set -euo pipefail
+          read -r -a services <<< "${{ needs.detect-changes.outputs.services }}"
+
+          for service in "${services[@]}"; do
+            case "$service" in
+              api_gateway|auth_service|chat_service|message_service|media_service)
+                python -m compileall "services/$service"
+                ;;
+            esac
+          done
+
+  smoke-test:
+    needs: [detect-changes, validate]
+    if: needs.detect-changes.outputs.services != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Start stack for smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          SECRET_KEY=dummy MONGO_PASSWORD=dummy docker compose up -d --build
+
+      - name: Wait for and verify routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tests/smoke_routes.py
+
+      - name: Stop smoke-test stack
+        if: always()
+        shell: bash
+        run: |
+          SECRET_KEY=dummy MONGO_PASSWORD=dummy docker compose down -v
 
   deploy:
-    needs: build-and-optional-test
+    needs: [detect-changes, validate, smoke-test]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: needs.detect-changes.outputs.services != ''
     steps:
       - name: Deploy to Server via SSH and Docker Compose
         uses: appleboy/ssh-action@v1.0.0
@@ -28,7 +144,9 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.DEPLOY_KEY }}
           script: |
-            cd /path/to/your/project
+            set -euo pipefail
+            DEPLOY_PATH="${DEPLOY_PATH:-$HOME/E2EE}"
+            cd "$DEPLOY_PATH"
             git pull origin main
-            docker-compose down
-            docker-compose up -d --build
+            services="${{ needs.detect-changes.outputs.services }}"
+            docker compose up -d --build $services
