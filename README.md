@@ -31,29 +31,34 @@ Arhitektura je pripravljena po skici iz navodil s poudarkom na varnosti in skala
 
 ```mermaid
 flowchart TD
-		A[Frontend<br/>Android app Kotlin<br/>Encryption / Decryption] -->|HTTPS| B[NGINX Reverse Proxy<br/>Port 80/443<br/>CDN Cloudflare]
+    %% Frontend and Edge
+    A[Frontend<br/>Android app Kotlin<br/>Encryption / Decryption] -->|HTTPS / WSS| CDN[Cloudflare CDN]
+    CDN -->|Traffic to Your Machine| B[NGINX Reverse Proxy<br/>Port 80/443]
 
-		B -->|Internal Network| C[Auth Service<br/>Port 8001]
-		B -->|Internal Network| D[Chat Service<br/>Port 8002]
-		B -->|Internal Network| E[Message Service<br/>Port 8003]
-		B -->|Internal Network| F[Media Service<br/>Port 8004]
-        B -->|WebSocket| G[API Gateway<br/>FastAPI Port 8000<br/>Realtime /ws/chats]
+    %% NGINX Subdomain Switching
+    B -->|Main Domain| G[API Gateway<br/>FastAPI Port 8000<br/>Realtime /ws/chats]
+    B -->|Logging Subdomain| LOG[Grafana Port 3000<br/>+ Loki Port 3100]
 
-        C -->|TLS| CDB[(PostgreSQL<br/>Port 5432<br/>Internal Only<br/>Users + Keys)]
-        D -->|Auth| MDB[(MongoDB<br/>Port 27017<br/>Internal Only<br/>Chats)]
-        E -->|Auth| MDB
-        F -->|TLS| FDB[MinIO S3<br/>Port 9000<br/>Internal Only<br/>Profile Pictures]
-        
-        C --> OBS[Prometheus<br/>Port 9090]
-        D --> OBS
-        E --> OBS
-        F --> OBS
-        
-        OBS --> LOG[Grafana<br/>Port 3000<br/>+ Loki<br/>Port 3100]
-        LOG --> ALERT[Alertmanager<br/>Port 9093]
-        
-        G -->|Encrypt/Decrypt| A
-        B --> A
+    %% API Gateway to Microservices
+    G -->|Internal Network| C[Auth Service<br/>Port 8001]
+    G -->|Internal Network| D[Chat Service<br/>Port 8002]
+    G -->|Internal Network| E[Message Service<br/>Port 8003]
+    G -->|Internal Network| F[Media Service<br/>Port 8004]
+
+    %% Databases & Storage
+    C -->|TLS| CDB[(PostgreSQL<br/>Port 5432<br/>Internal Only<br/>Users + Keys)]
+    D -->|Auth| MDB[(MongoDB<br/>Port 27017<br/>Internal Only<br/>Chats)]
+    E -->|Auth| MDB
+    F -->|TLS| FDB[MinIO S3<br/>Port 9000<br/>Internal Only<br/>Profile Pictures]
+    
+    %% Observability Stack
+    C --> OBS[Prometheus Port 9090]
+    D --> OBS
+    E --> OBS
+    F --> OBS
+    
+    OBS --> LOG
+    LOG --> ALERT[Alertmanager<br/>Port 9093]
 ```
 
 **Key Security Features:**
